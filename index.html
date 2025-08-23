@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suivi Sportif</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDPCMCi4BB2dySCc8G4adLYQXJSk-903v0",
+            authDomain: "weddingchart.firebaseapp.com",
+            projectId: "weddingchart",
+            storageBucket: "weddingchart.firebasestorage.app",
+            messagingSenderId: "345074315998",
+            appId: "1:345074315998:web:ae600053bcbe04a977884f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+
+        window.firebaseServices = {
+            db: getFirestore(app),
+            doc, setDoc, onSnapshot,
+            updateDoc, arrayUnion
+        };
+    </script>
+</head>
+<body>
+    <div id="app-container">
+        <header class="header">
+            <h1>Suivi Sportif 🏋️‍♂️</h1>
+            <p>Sélectionnez une date pour voir ou ajouter un entraînement.</p>
+            <input type="date" id="date-picker">
+        </header>
+
+        <main class="main-container">
+            <div class="form-container">
+                <h2>Ajouter un Exercice</h2>
+                <form id="add-workout-form">
+                    <div class="form-group">
+                        <label for="category-select">Catégorie</label>
+                        <select id="category-select" required>
+                            <option value="">Choisir une catégorie...</option>
+                            <option value="Pectoraux">Pectoraux</option>
+                            <option value="Dos">Dos</option>
+                            <option value="Jambes">Jambes</option>
+                            <option value="Épaules">Épaules</option>
+                            <option value="Biceps">Biceps</option>
+                            <option value="Triceps">Triceps</option>
+                            <option value="Cardio">Cardio</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="exercise-select">Exercice</label>
+                        <select id="exercise-select" required></select>
+                    </div>
+
+                    <div id="quick-add-container">
+                        <div class="quick-add-group">
+                            <label for="quick-sets">Séries</label>
+                            <input type="number" id="quick-sets" min="1" value="3">
+                        </div>
+                        <div class="quick-add-group">
+                            <label for="quick-reps">Répétitions</label>
+                            <input type="number" id="quick-reps" min="1">
+                        </div>
+                        <div class="quick-add-group">
+                            <label for="quick-weight">Poids</label>
+                            <input type="number" id="quick-weight" min="0" step="0.5">
+                        </div>
+                        <div class="quick-add-group">
+                            <label for="quick-unit">Unité</label>
+                            <select id="quick-unit">
+                                <option value="lbs" selected>lbs</option>
+                                <option value="kg">kg</option>
+                            </select>
+                        </div>
+                         <div class="quick-add-group bodyweight-group">
+                             <input type="checkbox" id="bodyweight-checkbox">
+                             <label for="bodyweight-checkbox">Poids du corps</label>
+                        </div>
+                        <button type="button" id="generate-sets-button">Générer les séries</button>
+                    </div>
+                    
+                    <div id="sets-container">
+                        </div>
+                    <button type="button" id="add-set-button">Ajouter une série manuellement</button>
+
+                    <div class="form-group">
+                        <label for="notes-input">Notes</label>
+                        <textarea id="notes-input" placeholder="Sensations, performances..."></textarea>
+                    </div>
+
+                    <button type="submit" class="submit-btn">Enregistrer l'exercice</button>
+                </form>
+            </div>
+
+            <div id="workout-log-container">
+                <h2>Entraînement du <span id="log-date"></span></h2>
+                <div id="workout-log"></div>
+            </div>
+        </main>
+    </div>
+    
+    <template id="set-row-template">
+        <div class="set-row">
+            <input type="number" class="reps-input" placeholder="Reps" min="0" required>
+            <span>x</span>
+            <input type="number" class="weight-input" placeholder="Poids" min="0" step="0.5" required>
+            <select class="unit-select">
+                <option value="lbs" selected>lbs</option>
+                <option value="kg">kg</option>
+            </select>
+            <button type="button" class="delete-set-btn">-</button>
+        </div>
+    </template>
+
+    <script src="script.js" type="module"></script>
+</body>
+</html>
