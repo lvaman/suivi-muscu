@@ -8,8 +8,8 @@ const config = {
         fr: {
             mainTitle: "Suivi Sportif 🏋️‍♂️",
             subTitle: "Sélectionnez une date pour voir ou ajouter un entraînement.",
-            addExerciseTitle: "Ajouter un Exercice",
-            editExerciseTitle: "Modifier l'Exercice",
+            addExerciseTitle: "Ajouter un exercice",
+            editExerciseTitle: "Modifier l'exercice",
             categoryLabel: "Catégorie",
             chooseCategory: "Choisir une catégorie...",
             exerciseLabel: "Exercice",
@@ -74,13 +74,62 @@ const config = {
         'Cardio': 'Cardio'
     },
     exercisesData: {
-        'Pectoraux': [{ french: 'Développé couché (Barre)', english: 'Barbell Bench Press' }, { french: 'Développé couché (Haltères)', english: 'Dumbbell Bench Press' }],
-        'Dos': [{ french: 'Tractions', english: 'Pull-ups' }, { french: 'Tirage vertical (Pulldown)', english: 'Lat Pulldown' }],
-        'Jambes': [{ french: 'Squat', english: 'Squat' }, { french: 'Presse à cuisses', english: 'Leg Press' }],
-        'Épaules': [{ french: 'Développé militaire (Barre)', english: 'Military Press (Barbell)' }, { french: 'Élévations latérales (Haltères)', english: 'Dumbbell Lateral Raises' }],
-        'Biceps': [{ french: 'Curl barre', english: 'Barbell Curl' }, { french: 'Curl haltères', english: 'Dumbbell Curl' }],
-        'Triceps': [{ french: 'Dips', english: 'Dips' }, { french: 'Barre au front', english: 'Skull Crusher' }],
-        'Cardio': [{ french: 'Tapis de course', english: 'Treadmill' }, { french: 'Vélo elliptique', english: 'Elliptical Trainer' }]
+        'Pectoraux': [
+            { french: 'Développé couché (Barre)', english: 'Barbell Bench Press' },
+            { french: 'Développé couché (Haltères)', english: 'Dumbbell Bench Press' },
+            { french: 'Développé couché (Smith)', english: 'Smith Machine Bench Press' },
+            { french: 'Presse à pectoraux (machine)', english: 'Chest Press Machine' },
+            { french: 'Développé incliné (Barre)', english: 'Incline Barbell Press' },
+            { french: 'Développé incliné (Haltères)', english: 'Incline Dumbbell Press' },
+            { french: 'Développé incliné (Smith)', english: 'Incline Smith Machine Press' },
+            { french: 'Presse à pectoraux inclinée (machine)', english: 'Incline Chest Press Machine' },
+            { french: 'Écartés avec haltères', english: 'Dumbbell Flys' },
+            { french: 'Écartés à la poulie haute', english: 'High Cable Fly' },
+            { french: 'Écartés à la poulie basse', english: 'Low Cable Fly' },
+            { french: 'Pompes', english: 'Push-ups' }
+        ],
+        'Dos': [
+            { french: 'Tractions', english: 'Pull-ups' },
+            { french: 'Tirage vertical (Pulldown)', english: 'Lat Pulldown' },
+            { french: 'Tirage vertical (unilatéral)', english: 'Single-Arm Lat Pulldown' },
+            { french: 'Rowing barre', english: 'Barbell Row' },
+            { french: 'Rowing haltère (unilatéral)', english: 'Single-Arm Dumbbell Row' },
+            { french: 'Tirage horizontal (2 mains)', english: 'Seated Cable Row (2 hands)' },
+            { french: 'Tirage horizontal à la poulie (unilatéral)', english: 'Single-Arm Cable Row' }
+        ],
+        'Jambes': [
+            { french: 'Squat', english: 'Squat' },
+            { french: 'Squat (Smith)', english: 'Smith Machine Squat' },
+            { french: 'Presse à cuisses', english: 'Leg Press' },
+            { french: 'Fentes', english: 'Lunges' },
+            { french: 'Leg extensions', english: 'Leg Extensions' },
+            { french: 'Leg curls', english: 'Leg Curls' }
+        ],
+        'Épaules': [
+            { french: 'Développé militaire (Barre)', english: 'Military Press (Barbell)' },
+            { french: 'Développé militaire (Haltères)', english: 'Military Press (Dumbbell)' },
+            { french: 'Développé épaules haltères (banc incliné)', english: 'Incline Dumbbell Shoulder Press' },
+            { french: 'Développé militaire (Smith)', english: 'Smith Machine Military Press' },
+            { french: 'Élévations latérales (Haltères)', english: 'Dumbbell Lateral Raises' },
+            { french: 'Élévations latérales à la poulie (unilatéral)', english: 'Single-Arm Cable Lateral Raise' },
+            { french: 'Oiseau', english: 'Bent-over Dumbbell Raise' }
+        ],
+        'Biceps': [
+            { french: 'Curl barre', english: 'Barbell Curl' },
+            { french: 'Curl haltères', english: 'Dumbbell Curl' },
+            { french: 'Curl marteau', english: 'Hammer Curl' }
+        ],
+        'Triceps': [
+            { french: 'Dips', english: 'Dips' },
+            { french: 'Barre au front', english: 'Skull Crusher' },
+            { french: 'Extensions triceps à la poulie (Pushdowns)', english: 'Tricep Pushdown' },
+            { french: 'Extensions triceps à la poulie haute (au-dessus de la tête)', english: 'Overhead Cable Tricep Extension' }
+        ],
+        'Cardio': [
+            { french: 'Tapis de course', english: 'Treadmill' },
+            { french: 'Vélo elliptique', english: 'Elliptical Trainer' },
+            { french: 'Rameur', english: 'Rowing Machine' }
+        ]
     },
     get englishToFrenchCategoryKey() {
         return Object.fromEntries(Object.entries(this.categoryTranslations).map(([fr, en]) => [en, fr]));
@@ -209,11 +258,14 @@ const ui = {
 
     resetForm() {
         state.editingExerciseIndex = null;
-        dom.workoutForm.reset();
-        this.populateCategoryOptions();
-        this.updateExerciseOptions();
+
+        dom.notesInput.value = '';
+        dom.quickWeightInput.value = '';
+        dom.bodyweightCheckbox.checked = false;
+
         dom.setsContainer.innerHTML = "";
         this.addSetRow();
+
         dom.cancelEditBtn.style.display = 'none';
         dom.quickWeightInput.disabled = false;
         this.updateText();
