@@ -524,11 +524,16 @@ const handlers = {
         if (!day) return;
         const workoutData = state.calendar.monthlyWorkouts.get(day.dataset.date);
         if (workoutData) {
-            const exerciseNames = workoutData.map(ex => {
+            const listItems = workoutData.map(ex => {
                 const exDetails = Object.values(config.exercisesData).flat().find(e => e.english === ex.name);
-                return state.language === 'fr' ? (exDetails?.french || ex.name) : ex.name;
-            });
-            dom.calendarTooltip.innerHTML = `<ul><li>${exerciseNames.join('</li><li>')}</li></ul>`;
+                const displayName = state.language === 'fr' ? (exDetails?.french || ex.name) : ex.name;
+                let colorCategory = ex.category;
+                if (colorCategory === 'Biceps' || colorCategory === 'Triceps') {
+                    colorCategory = 'Arms';
+                }
+                return `<li><span class="category-dot" style="background-color: var(--color-${colorCategory});"></span>${displayName}</li>`;
+            }).join('');
+            dom.calendarTooltip.innerHTML = `<ul>${listItems}</ul>`;
             dom.calendarTooltip.style.display = 'block';
         }
     },

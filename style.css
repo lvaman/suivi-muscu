@@ -288,10 +288,19 @@ button { cursor: pointer; border: none; padding: 10px 15px; border-radius: 4px; 
     list-style-type: none;
 }
 .calendar-tooltip li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 4px;
 }
 .calendar-tooltip li:last-child {
     margin-bottom: 0;
+}
+.category-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 /* --- Responsive Design --- */
