@@ -63,7 +63,7 @@ body {
     position: absolute;
     top: 10px;
     left: 10px;
-    width: 210px;
+    width: 250px;
     border: 1px solid var(--medium-gray-color);
     border-radius: var(--border-radius);
     padding: 5px;
@@ -84,12 +84,30 @@ body {
 .simple-calendar-grid {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
 }
+.simple-calendar-weekday {
+    font-size: 0.75em;
+    font-weight: bold;
+    color: var(--dark-gray-color);
+    text-align: center;
+    padding-bottom: 4px;
+    font-family: inherit;
+}
 .simple-calendar-day {
     display: flex; justify-content: center; align-items: center; height: 24px; font-size: 0.8em; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;
 }
 .simple-calendar-day:hover { background-color: #e9ecef; }
+.simple-calendar-day.empty {
+    cursor: default;
+}
+.simple-calendar-day.empty:hover {
+    background-color: transparent;
+}
 .simple-calendar-day.has-workout {
     font-weight: bold; color: white;
+}
+.simple-calendar-day.today-day {
+    outline: 2px solid var(--medium-gray-color);
+    outline-offset: -2px;
 }
 .simple-calendar-day.selected-day {
     outline: 2px solid var(--secondary-color);

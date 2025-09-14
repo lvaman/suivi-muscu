@@ -33,7 +33,8 @@ const config = {
             repsDisplay: "reps",
             deleteConfirm: "Êtes-vous sûr de vouloir supprimer cet exercice ?",
             alertIncompleteSet: "Veuillez ajouter au moins une série valide.",
-            alertQuickAdd: "Veuillez entrer un nombre valide de séries et de répétitions."
+            alertQuickAdd: "Veuillez entrer un nombre valide de séries et de répétitions.",
+            dayAbbr: ['L', 'M', 'M', 'J', 'V', 'S', 'D']
         },
         en: {
             mainTitle: "Fitness Tracker 🏋️‍♂️",
@@ -63,7 +64,8 @@ const config = {
             repsDisplay: "reps",
             deleteConfirm: "Are you sure you want to delete this exercise?",
             alertIncompleteSet: "Please add at least one valid set.",
-            alertQuickAdd: "Please enter a valid number of sets and repetitions."
+            alertQuickAdd: "Please enter a valid number of sets and repetitions.",
+            dayAbbr: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
         }
     },
     categoryTranslations: {
@@ -245,7 +247,7 @@ const ui = {
         const exercises = config.exercisesData[selectedCategoryKey] || [];
         exercises.forEach((exercise, index) => {
             const option = document.createElement('option');
-            option.value = index; // Using index as value, per original logic
+            option.value = index;
             option.textContent = state.language === 'fr' ? exercise.french : exercise.english;
             dom.exerciseSelect.appendChild(option);
         });
@@ -317,6 +319,7 @@ const ui = {
         const { year, month } = state.calendar;
         const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
         const monthName = new Date(year, month).toLocaleString(locale, { month: 'long', year: 'numeric' });
+        const todayStr = new Date().toISOString().split('T')[0];
 
         let calendarWrapper = document.getElementById('calendar-grid-wrapper');
         if (!calendarWrapper) {
@@ -324,21 +327,35 @@ const ui = {
             calendarWrapper.id = 'calendar-grid-wrapper';
             dom.simpleCalendarContainer.prepend(calendarWrapper);
         }
+        const dayHeaders = config.translations[state.language].dayAbbr
+            .map(day => `<div class="simple-calendar-weekday">${day}</div>`).join('');
         let html = `
             <div class="simple-calendar-header">
                 <button class="simple-calendar-nav" data-action="prev-month" aria-label="Previous month">‹</button>
                 <span data-action="open-picker">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</span>
                 <button class="simple-calendar-nav" data-action="next-month" aria-label="Next month">›</button>
             </div>
-            <div class="simple-calendar-grid">`;
+            <div class="simple-calendar-grid">
+                ${dayHeaders}
+            `;
         const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDayOfMonth = new Date(year, month, 1);
+        const dayOffset = (firstDayOfMonth.getDay() + 6) % 7;
+        for (let i = 0; i < dayOffset; i++) {
+            html += `<div class="simple-calendar-day empty"></div>`;
+        }
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const workoutData = state.calendar.monthlyWorkouts.get(dateStr);
             const hasWorkout = !!workoutData && workoutData.length > 0;
             const isSelected = dateStr === state.currentDate;
+            const isToday = dateStr === todayStr;
             const { className, style } = hasWorkout ? logic.getWorkoutColorInfo(workoutData) : { className: '', style: '' };
-            html += `<div class="simple-calendar-day ${hasWorkout ? 'has-workout' : ''} ${isSelected ? 'selected-day' : ''} ${className}" style="${style}" data-date="${dateStr}">${day}</div>`;
+            const dayClasses = ['simple-calendar-day'];
+            if (hasWorkout) dayClasses.push('has-workout', className);
+            if (isToday) dayClasses.push('today-day');
+            if (isSelected) dayClasses.push('selected-day');
+            html += `<div class="${dayClasses.join(' ')}" style="${style}" data-date="${dateStr}">${day}</div>`;
         }
         html += '</div>';
         calendarWrapper.innerHTML = html;
@@ -492,6 +509,10 @@ const handlers = {
     },
 
     handleKeyDown(e) {
+        if (e.key === 'Escape' && dom.calendarPicker.classList.contains('visible')) {
+            ui.togglePicker(false);
+            return;
+        }
         const isInputFocused = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
         if (isInputFocused) return;
         if (e.key === 'ArrowLeft') logic.navigateDays(-1);
@@ -594,9 +615,13 @@ const logic = {
 
         dom.exerciseSearch.addEventListener('input', handlers.handleExerciseSearch);
         dom.autocompleteResults.addEventListener('click', handlers.handleAutocompleteClick);
+
         document.addEventListener('click', (e) => {
-            if (!dom.exerciseSearch.contains(e.target)) {
+            if (!e.target.closest('.search-container')) {
                  dom.autocompleteResults.style.display = 'none';
+            }
+            if (dom.calendarPicker.classList.contains('visible') && !e.target.closest('#simple-calendar-container')) {
+                ui.togglePicker(false);
             }
         });
     },
