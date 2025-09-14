@@ -10,6 +10,7 @@ const config = {
             subTitle: "Sélectionnez une date pour voir ou ajouter un entraînement.",
             addExerciseTitle: "Ajouter un exercice",
             editExerciseTitle: "Modifier l'exercice",
+            exerciseSearchLabel: "Rechercher un exercice",
             categoryLabel: "Catégorie",
             chooseCategory: "Choisir une catégorie...",
             exerciseLabel: "Exercice",
@@ -39,6 +40,7 @@ const config = {
             subTitle: "Select a date to view or add a workout.",
             addExerciseTitle: "Add Exercise",
             editExerciseTitle: "Edit Exercise",
+            exerciseSearchLabel: "Search Exercise",
             categoryLabel: "Category",
             chooseCategory: "Choose a category...",
             exerciseLabel: "Exercise",
@@ -138,16 +140,17 @@ const config = {
 
 // --- Application State ---
 const state = {
-    language: 'fr',
+    language: 'en',
     displayUnit: 'lbs',
     currentDate: new Date().toISOString().split('T')[0],
     currentWorkoutData: null,
     editingExerciseIndex: null,
     firestoreUnsubscribe: null,
+    allExercisesFlat: [],
     calendar: {
         year: new Date().getFullYear(),
         month: new Date().getMonth(),
-        workoutDays: new Set()
+        monthlyWorkouts: new Map()
     }
 };
 
@@ -156,6 +159,8 @@ const dom = {
     datePicker: document.getElementById('date-picker'),
     categorySelect: document.getElementById('category-select'),
     exerciseSelect: document.getElementById('exercise-select'),
+    exerciseSearch: document.getElementById('exercise-search'),
+    autocompleteResults: document.getElementById('autocomplete-results'),
     setsContainer: document.getElementById('sets-container'),
     addSetButton: document.getElementById('add-set-button'),
     notesInput: document.getElementById('notes-input'),
@@ -183,6 +188,7 @@ const dom = {
     monthSelect: document.getElementById('month-select'),
     yearSelect: document.getElementById('year-select'),
     pickerGoBtn: document.getElementById('picker-go-btn'),
+    calendarTooltip: document.getElementById('calendar-tooltip'),
 };
 
 // --- UI Functions ---
@@ -258,14 +264,10 @@ const ui = {
 
     resetForm() {
         state.editingExerciseIndex = null;
-
-        dom.notesInput.value = '';
-        dom.quickWeightInput.value = '';
-        dom.bodyweightCheckbox.checked = false;
-
+        dom.workoutForm.reset();
+        dom.exerciseSearch.value = '';
         dom.setsContainer.innerHTML = "";
         this.addSetRow();
-
         dom.cancelEditBtn.style.display = 'none';
         dom.quickWeightInput.disabled = false;
         this.updateText();
@@ -285,7 +287,7 @@ const ui = {
             dom.workoutLog.innerHTML = `<p>${config.translations[state.language].noWorkout}</p>`;
             return;
         }
-        exercises.forEach((ex, index) => {
+        exercises.forEach((ex) => {
             const card = document.createElement('div');
             card.className = "exercise-card";
             const categoryDisplay = state.language === 'fr' ? (config.englishToFrenchCategoryKey[ex.category] || ex.category) : ex.category;
@@ -296,10 +298,12 @@ const ui = {
                 const weightText = set.weight === 0 ? config.translations[state.language].bodyweightDisplay : `${displayWeight} ${state.displayUnit}`;
                 return `<li><span>${config.translations[state.language].setLabel}: ${set.reps} ${config.translations[state.language].repsDisplay}</span> <span>${weightText}</span></li>`;
             }).join('');
+
             card.innerHTML = `
+                <div class="drag-handle" aria-label="Drag to reorder">⠿</div>
                 <div class="exercise-actions">
-                    <button class="action-btn edit-btn" data-index="${index}" title="Edit" aria-label="Edit exercise">✏️</button>
-                    <button class="action-btn delete-btn" data-index="${index}" title="Delete" aria-label="Delete exercise">🗑️</button>
+                    <button class="action-btn edit-btn" title="Edit" aria-label="Edit exercise">✏️</button>
+                    <button class="action-btn delete-btn" title="Delete" aria-label="Delete exercise">🗑️</button>
                 </div>
                 <h3>${exerciseDisplay} <small>(${categoryDisplay})</small></h3>
                 <ul>${setsList}</ul>
@@ -309,15 +313,8 @@ const ui = {
         });
     },
 
-    async renderSimpleCalendar() {
+    renderCalendarGrid() {
         const { year, month } = state.calendar;
-        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
-        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
-
-        const q = api.query(api.collection(api.db, 'daily_workouts'), api.where('__name__', '>=', startDate), api.where('__name__', '<=', endDate));
-        const querySnapshot = await api.getDocs(q);
-        state.calendar.workoutDays = new Set(querySnapshot.docs.map(doc => doc.id));
-
         const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
         const monthName = new Date(year, month).toLocaleString(locale, { month: 'long', year: 'numeric' });
 
@@ -337,9 +334,11 @@ const ui = {
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const hasWorkout = state.calendar.workoutDays.has(dateStr);
+            const workoutData = state.calendar.monthlyWorkouts.get(dateStr);
+            const hasWorkout = !!workoutData && workoutData.length > 0;
             const isSelected = dateStr === state.currentDate;
-            html += `<div class="simple-calendar-day ${hasWorkout ? 'has-workout' : ''} ${isSelected ? 'selected-day' : ''}" data-date="${dateStr}">${day}</div>`;
+            const { className, style } = hasWorkout ? logic.getWorkoutColorInfo(workoutData) : { className: '', style: '' };
+            html += `<div class="simple-calendar-day ${hasWorkout ? 'has-workout' : ''} ${isSelected ? 'selected-day' : ''} ${className}" style="${style}" data-date="${dateStr}">${day}</div>`;
         }
         html += '</div>';
         calendarWrapper.innerHTML = html;
@@ -373,7 +372,15 @@ const handlers = {
     handleLogActions(e) {
         const target = e.target.closest(".action-btn");
         if (!target) return;
-        const index = parseInt(target.dataset.index, 10);
+
+        const card = e.target.closest('.exercise-card');
+        if (!card) return;
+
+        const allCards = Array.from(dom.workoutLog.querySelectorAll('.exercise-card'));
+        const index = allCards.indexOf(card);
+
+        if (index === -1) return;
+
         if (target.classList.contains("edit-btn")) logic.startEditExercise(index);
         else if (target.classList.contains("delete-btn")) logic.deleteExercise(index);
     },
@@ -411,14 +418,15 @@ const handlers = {
 
     handleCalendarActions(e) {
         const { action, date } = e.target.dataset;
-        if (action === 'prev-month') {
-            state.calendar.month--;
-            if (state.calendar.month < 0) { state.calendar.month = 11; state.calendar.year--; }
-            ui.renderSimpleCalendar();
-        } else if (action === 'next-month') {
-            state.calendar.month++;
-            if (state.calendar.month > 11) { state.calendar.month = 0; state.calendar.year++; }
-            ui.renderSimpleCalendar();
+        if (action === 'prev-month' || action === 'next-month') {
+            if (action === 'prev-month') {
+                state.calendar.month--;
+                if (state.calendar.month < 0) { state.calendar.month = 11; state.calendar.year--; }
+            } else {
+                state.calendar.month++;
+                if (state.calendar.month > 11) { state.calendar.month = 0; state.calendar.year++; }
+            }
+            logic.fetchAndRenderCalendar();
         } else if (date) {
             logic.updateSelectedDate(date);
         } else if (action === 'open-picker') {
@@ -431,7 +439,7 @@ const handlers = {
         state.calendar.year = parseInt(dom.yearSelect.value, 10);
         state.calendar.month = parseInt(dom.monthSelect.value, 10);
         ui.togglePicker(false);
-        ui.renderSimpleCalendar();
+        logic.fetchAndRenderCalendar();
     },
 
     generateSetsFromQuickAdd() {
@@ -442,27 +450,135 @@ const handlers = {
         const unitValue = dom.quickUnitSelect.value;
         dom.setsContainer.innerHTML = "";
         for (let i = 0; i < setCount; i++) ui.addSetRow({ reps: repCount, weight: weightValue, unit: unitValue });
+    },
+
+    handleExerciseSearch() {
+        const searchTerm = dom.exerciseSearch.value.toLowerCase();
+        if (searchTerm.length < 2) {
+            dom.autocompleteResults.innerHTML = '';
+            dom.autocompleteResults.style.display = 'none';
+            return;
+        }
+
+        const results = state.allExercisesFlat.filter(ex =>
+            ex.english.toLowerCase().includes(searchTerm) ||
+            ex.french.toLowerCase().includes(searchTerm)
+        );
+
+        if (results.length > 0) {
+            dom.autocompleteResults.innerHTML = results.map(ex => {
+                const categoryDisplay = state.language === 'fr' ? ex.categoryKey : config.categoryTranslations[ex.categoryKey];
+                const exerciseDisplay = state.language === 'fr' ? ex.french : ex.english;
+                return `
+                    <div class="autocomplete-item" data-category="${ex.categoryKey}" data-exercise-index="${ex.index}">
+                        ${exerciseDisplay} <small>(${categoryDisplay})</small>
+                    </div>`;
+            }).join('');
+            dom.autocompleteResults.style.display = 'block';
+        } else {
+            dom.autocompleteResults.style.display = 'none';
+        }
+    },
+
+    handleAutocompleteClick(e) {
+        const item = e.target.closest('.autocomplete-item');
+        if (!item) return;
+        const { category, exerciseIndex } = item.dataset;
+        dom.categorySelect.value = category;
+        dom.categorySelect.dispatchEvent(new Event('change'));
+        dom.exerciseSelect.value = exerciseIndex;
+        dom.exerciseSearch.value = '';
+        dom.autocompleteResults.style.display = 'none';
+    },
+
+    handleKeyDown(e) {
+        const isInputFocused = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+        if (isInputFocused) return;
+        if (e.key === 'ArrowLeft') logic.navigateDays(-1);
+        if (e.key === 'ArrowRight') logic.navigateDays(1);
+    },
+
+    handleCalendarMouseOver(e) {
+        const day = e.target.closest('.has-workout');
+        if (!day) return;
+        const workoutData = state.calendar.monthlyWorkouts.get(day.dataset.date);
+        if (workoutData) {
+            const exerciseNames = workoutData.map(ex => {
+                const exDetails = Object.values(config.exercisesData).flat().find(e => e.english === ex.name);
+                return state.language === 'fr' ? (exDetails?.french || ex.name) : ex.name;
+            });
+            dom.calendarTooltip.innerHTML = `<ul><li>${exerciseNames.join('</li><li>')}</li></ul>`;
+            dom.calendarTooltip.style.display = 'block';
+        }
+    },
+
+    handleCalendarMouseOut() {
+        dom.calendarTooltip.style.display = 'none';
+    },
+
+    handleCalendarMouseMove(e) {
+        dom.calendarTooltip.style.left = `${e.pageX + 15}px`;
+        dom.calendarTooltip.style.top = `${e.pageY + 15}px`;
     }
 };
 
 // --- Core Application Logic ---
 const logic = {
     initialize() {
+        this.flattenExercises();
+        this.initializeDragAndDrop();
         dom.datePicker.value = state.currentDate;
         ui.populateCategoryOptions();
         ui.updateText();
         ui.updateExerciseOptions();
         ui.addSetRow();
-        ui.renderSimpleCalendar();
+        this.fetchAndRenderCalendar();
         this.loadWorkoutsForDate(state.currentDate);
         this.setupEventListeners();
     },
 
+    flattenExercises() {
+        state.allExercisesFlat = [];
+        for (const categoryKey in config.exercisesData) {
+            config.exercisesData[categoryKey].forEach((exercise, index) => {
+                state.allExercisesFlat.push({ ...exercise, categoryKey, index });
+            });
+        }
+    },
+
+    initializeDragAndDrop() {
+        if (typeof Sortable === 'undefined') return;
+        new Sortable(dom.workoutLog, {
+            animation: 150,
+            handle: '.drag-handle',
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            onEnd: (evt) => {
+                if (evt.oldIndex === evt.newIndex) return;
+                const movedItem = state.currentWorkoutData.splice(evt.oldIndex, 1)[0];
+                state.currentWorkoutData.splice(evt.newIndex, 0, movedItem);
+                this.saveWorkoutOrder();
+            }
+        });
+    },
+
+    async saveWorkoutOrder() {
+        if (!state.currentWorkoutData) return;
+        const docRef = api.doc(api.db, "daily_workouts", state.currentDate);
+        await api.setDoc(docRef, { exercises: state.currentWorkoutData }, { merge: true });
+    },
+
     setupEventListeners() {
+        document.addEventListener('keydown', handlers.handleKeyDown);
         dom.datePicker.addEventListener('change', handlers.handleDateChange);
         dom.prevDayBtn.addEventListener('click', () => this.navigateDays(-1));
         dom.nextDayBtn.addEventListener('click', () => this.navigateDays(1));
+
         dom.simpleCalendarContainer.addEventListener('click', handlers.handleCalendarActions);
+        dom.simpleCalendarContainer.addEventListener('mouseover', handlers.handleCalendarMouseOver);
+        dom.simpleCalendarContainer.addEventListener('mouseout', handlers.handleCalendarMouseOut);
+        dom.simpleCalendarContainer.addEventListener('mousemove', handlers.handleCalendarMouseMove);
+
         dom.pickerGoBtn.addEventListener('click', handlers.handlePickerGo);
         dom.categorySelect.addEventListener('change', ui.updateExerciseOptions);
         dom.addSetButton.addEventListener('click', () => ui.addSetRow());
@@ -475,6 +591,27 @@ const logic = {
         dom.displayLbsButton.addEventListener('click', () => this.setDisplayUnit('lbs'));
         dom.cancelEditBtn.addEventListener('click', () => ui.resetForm());
         dom.workoutLog.addEventListener('click', handlers.handleLogActions);
+
+        dom.exerciseSearch.addEventListener('input', handlers.handleExerciseSearch);
+        dom.autocompleteResults.addEventListener('click', handlers.handleAutocompleteClick);
+        document.addEventListener('click', (e) => {
+            if (!dom.exerciseSearch.contains(e.target)) {
+                 dom.autocompleteResults.style.display = 'none';
+            }
+        });
+    },
+
+    async fetchAndRenderCalendar() {
+        const { year, month } = state.calendar;
+        const startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        const endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+        const q = api.query(api.collection(api.db, 'daily_workouts'), api.where('__name__', '>=', startDate), api.where('__name__', '<=', endDate));
+        const querySnapshot = await api.getDocs(q);
+        state.calendar.monthlyWorkouts.clear();
+        querySnapshot.docs.forEach(doc => {
+            state.calendar.monthlyWorkouts.set(doc.id, doc.data().exercises);
+        });
+        ui.renderCalendarGrid();
     },
 
     updateSelectedDate(newDate) {
@@ -485,11 +622,12 @@ const logic = {
         if (state.calendar.year !== year || state.calendar.month !== month - 1) {
             state.calendar.year = year;
             state.calendar.month = month - 1;
-            ui.renderSimpleCalendar();
+            this.fetchAndRenderCalendar();
         } else {
-            document.querySelector('.simple-calendar-day.selected-day')?.classList.remove('selected-day');
-            document.querySelector(`.simple-calendar-day[data-date="${newDate}"]`)?.classList.add('selected-day');
+             document.querySelector('.simple-calendar-day.selected-day')?.classList.remove('selected-day');
+             document.querySelector(`.simple-calendar-day[data-date="${newDate}"]`)?.classList.add('selected-day');
         }
+
         this.loadWorkoutsForDate(newDate);
     },
 
@@ -502,7 +640,7 @@ const logic = {
         ui.updateExerciseOptions();
         ui.updateText();
         ui.renderWorkoutLog();
-        ui.renderSimpleCalendar();
+        ui.renderCalendarGrid();
     },
 
     setDisplayUnit(unit) {
@@ -534,10 +672,19 @@ const logic = {
 
     async deleteExercise(index) {
         if (!confirm(config.translations[state.language].deleteConfirm)) return;
+
         const updatedExercises = [...state.currentWorkoutData];
         updatedExercises.splice(index, 1);
+
         const docRef = api.doc(api.db, "daily_workouts", state.currentDate);
-        await api.setDoc(docRef, { exercises: updatedExercises }, { merge: true });
+
+        if (updatedExercises.length > 0) {
+            // If exercises remain, update the document
+            await api.setDoc(docRef, { exercises: updatedExercises });
+        } else {
+            // If this was the last exercise, delete the entire document
+            await api.deleteDoc(docRef);
+        }
     },
 
     loadWorkoutsForDate(dateString) {
@@ -546,7 +693,15 @@ const logic = {
         state.firestoreUnsubscribe = api.onSnapshot(docRef, docSnap => {
             state.currentWorkoutData = docSnap.exists() ? docSnap.data().exercises : [];
             ui.renderWorkoutLog();
-            ui.renderSimpleCalendar();
+            if (!docSnap.metadata.hasPendingWrites) {
+                const exercises = state.currentWorkoutData;
+                if (exercises && exercises.length > 0) {
+                    state.calendar.monthlyWorkouts.set(docSnap.id, exercises);
+                } else {
+                    state.calendar.monthlyWorkouts.delete(docSnap.id);
+                }
+                ui.renderCalendarGrid();
+            }
         });
     },
 
@@ -554,6 +709,51 @@ const logic = {
         const date = new Date(state.currentDate + 'T12:00:00');
         date.setDate(date.getDate() + days);
         this.updateSelectedDate(date.toISOString().split('T')[0]);
+    },
+
+    getWorkoutColorInfo(exercises) {
+        if (!exercises || exercises.length === 0) return { className: '', style: '' };
+        const orderedUniqueCategories = [];
+        const seenCategories = new Set();
+        for (const ex of exercises) {
+            let category = ex.category;
+            if (category === 'Biceps' || category === 'Triceps') {
+                category = 'Arms';
+            }
+            if (!seenCategories.has(category)) {
+                seenCategories.add(category);
+                orderedUniqueCategories.push(category);
+            }
+        }
+
+        const uniqueCount = orderedUniqueCategories.length;
+        let className = '';
+        let style = '';
+
+        switch (uniqueCount) {
+            case 1:
+                className = 'workout-color-1';
+                style = `--c1: var(--color-${orderedUniqueCategories[0]});`;
+                break;
+            case 2:
+                className = 'workout-color-2';
+                style = `--c1: var(--color-${orderedUniqueCategories[0]}); --c2: var(--color-${orderedUniqueCategories[1]});`;
+                break;
+            case 3:
+                className = 'workout-color-3';
+                style = `--c1: var(--color-${orderedUniqueCategories[0]}); --c2: var(--color-${orderedUniqueCategories[1]}); --c3: var(--color-${orderedUniqueCategories[2]});`;
+                break;
+            default: // 4 or more categories
+                className = 'workout-color-4';
+                style = `
+                    --c1: var(--color-${orderedUniqueCategories[0]});
+                    --c2: var(--color-${orderedUniqueCategories[1]});
+                    --c3: var(--color-${orderedUniqueCategories[2]});
+                    --c4: var(--color-${orderedUniqueCategories[3]});`;
+                break;
+        }
+
+        return { className, style };
     }
 };
 

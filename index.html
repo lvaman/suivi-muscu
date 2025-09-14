@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fitness Tracker</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <script type="module">
         // Firebase SDK initialization
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDPCMCi4BB2dySCc8G4adLYQXJSk-903v0",
@@ -20,7 +21,7 @@
         };
         const app = initializeApp(firebaseConfig);
         // Expose Firebase services to the global window object for script.js
-        window.firebaseServices = { db: getFirestore(app), doc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, query, where, getDocs };
+        window.firebaseServices = { db: getFirestore(app), doc, setDoc, onSnapshot, updateDoc, arrayUnion, collection, query, where, getDocs, deleteDoc };
     </script>
 </head>
 <body>
@@ -35,12 +36,12 @@
             </div>
 
             <div class="language-selector">
-                <img src="https://flagcdn.com/fr.svg" alt="Français" id="lang-fr" class="flag active">
-                <img src="https://flagcdn.com/us.svg" alt="English" id="lang-en" class="flag">
+                <img src="https://flagcdn.com/fr.svg" alt="Français" id="lang-fr" class="flag">
+                <img src="https://flagcdn.com/us.svg" alt="English" id="lang-en" class="flag active">
             </div>
 
-            <h1 data-translate-key="mainTitle">Suivi Sportif 🏋️‍♂️</h1>
-            <p data-translate-key="subTitle">Sélectionnez une date pour voir ou ajouter un entraînement.</p>
+            <h1 data-translate-key="mainTitle">Fitness Tracker 🏋️‍♂️</h1>
+            <p data-translate-key="subTitle">Select a date to view or add a workout.</p>
             <div class="date-navigation">
                 <button id="prev-day-btn" class="day-nav-btn" aria-label="Previous day">‹</button>
                 <input type="date" id="date-picker" aria-label="Date selector">
@@ -50,35 +51,41 @@
 
         <main class="main-container">
             <div class="form-container">
-                <h2 data-translate-key="addExerciseTitle" id="form-title">Ajouter un exercice</h2>
+                <h2 data-translate-key="addExerciseTitle" id="form-title">Add Exercise</h2>
                 <form id="add-workout-form">
-                    <div class="form-group"><label for="category-select" data-translate-key="categoryLabel">Catégorie</label><select id="category-select" required></select></div>
-                    <div class="form-group"><label for="exercise-select" data-translate-key="exerciseLabel">Exercice</label><select id="exercise-select" required></select></div>
+                    <div class="form-group search-container">
+                        <label for="exercise-search" data-translate-key="exerciseSearchLabel">Search Exercise</label>
+                        <input type="text" id="exercise-search" placeholder="e.g., Bench Press" autocomplete="off">
+                        <div id="autocomplete-results"></div>
+                    </div>
+                    <div class="form-group"><label for="category-select" data-translate-key="categoryLabel">Category</label><select id="category-select" required></select></div>
+                    <div class="form-group"><label for="exercise-select" data-translate-key="exerciseLabel">Exercise</label><select id="exercise-select" required></select></div>
                     <div id="quick-add-container">
-                        <div class="quick-add-group"><label for="quick-sets" data-translate-key="setsLabel">Séries</label><input type="number" id="quick-sets" min="1" value="3"></div>
-                        <div class="quick-add-group"><label for="quick-reps" data-translate-key="repsLabel">Répétitions</label><input type="number" id="quick-reps" min="1"></div>
-                        <div class="quick-add-group"><label for="quick-weight" data-translate-key="weightLabel">Poids</label><input type="number" id="quick-weight" min="0" step="0.5"></div>
-                        <div class="quick-add-group"><label for="quick-unit" data-translate-key="unitLabel">Unité</label><select id="quick-unit"><option value="lbs" selected>lbs</option><option value="kg">kg</option></select></div>
-                        <div class="quick-add-group bodyweight-group"><input type="checkbox" id="bodyweight-checkbox"><label for="bodyweight-checkbox" data-translate-key="bodyweightLabel">Poids du corps</label></div>
-                        <button type="button" id="generate-sets-button" data-translate-key="generateSetsBtn">Générer les séries</button>
+                        <div class="quick-add-group"><label for="quick-sets" data-translate-key="setsLabel">Sets</label><input type="number" id="quick-sets" min="1" value="3"></div>
+                        <div class="quick-add-group"><label for="quick-reps" data-translate-key="repsLabel">Repetitions</label><input type="number" id="quick-reps" min="1"></div>
+                        <div class="quick-add-group"><label for="quick-weight" data-translate-key="weightLabel">Weight</label><input type="number" id="quick-weight" min="0" step="0.5"></div>
+                        <div class="quick-add-group"><label for="quick-unit" data-translate-key="unitLabel">Unit</label><select id="quick-unit"><option value="lbs" selected>lbs</option><option value="kg">kg</option></select></div>
+                        <div class="quick-add-group bodyweight-group"><input type="checkbox" id="bodyweight-checkbox"><label for="bodyweight-checkbox" data-translate-key="bodyweightLabel">Bodyweight</label></div>
+                        <button type="button" id="generate-sets-button" data-translate-key="generateSetsBtn">Generate Sets</button>
                     </div>
                     <div id="sets-container"></div>
-                    <button type="button" id="add-set-button" data-translate-key="addSetManuallyBtn">Ajouter une série manuellement</button>
-                    <div class="form-group"><label for="notes-input" data-translate-key="notesLabel">Notes</label><textarea id="notes-input" data-translate-key="notesPlaceholder" placeholder="Sensations, performances..."></textarea></div>
-                    <div class="form-actions"><button type="submit" class="submit-btn" id="submit-workout-btn" data-translate-key="saveExerciseBtn">Enregistrer</button><button type="button" class="cancel-btn" id="cancel-edit-btn" data-translate-key="cancelEditBtn">Annuler</button></div>
+                    <button type="button" id="add-set-button" data-translate-key="addSetManuallyBtn">Add Set Manually</button>
+                    <div class="form-group"><label for="notes-input" data-translate-key="notesLabel">Notes</label><textarea id="notes-input" data-translate-key="notesPlaceholder" placeholder="How it felt, performance..."></textarea></div>
+                    <div class="form-actions"><button type="submit" class="submit-btn" id="submit-workout-btn" data-translate-key="saveExerciseBtn">Save</button><button type="button" class="cancel-btn" id="cancel-edit-btn" data-translate-key="cancelEditBtn">Cancel</button></div>
                 </form>
             </div>
             <div id="workout-log-container">
-                <div class="workout-log-header"><h2 data-translate-key="workoutOf">Entraînement du <span id="log-date"></span></h2><div class="display-unit-selector"><button id="display-kg" class="unit-toggle">kg</button><button id="display-lbs" class="unit-toggle active">lbs</button></div></div>
+                <div class="workout-log-header"><h2 data-translate-key="workoutOf">Workout for <span id="log-date"></span></h2><div class="display-unit-selector"><button id="display-kg" class="unit-toggle">kg</button><button id="display-lbs" class="unit-toggle active">lbs</button></div></div>
                 <div id="workout-log"></div>
             </div>
         </main>
     </div>
     <template id="set-row-template">
         <div class="set-row">
-            <input type="number" class="reps-input" placeholder="Reps" min="0" required><span>x</span><input type="number" class="weight-input" placeholder="Poids" min="0" step="0.5" required><select class="unit-select"><option value="lbs" selected>lbs</option><option value="kg">kg</option></select><button type="button" class="delete-set-btn" aria-label="Delete set">-</button>
+            <input type="number" class="reps-input" placeholder="Reps" min="0" required><span>x</span><input type="number" class="weight-input" placeholder="Weight" min="0" step="0.5" required><select class="unit-select"><option value="lbs" selected>lbs</option><option value="kg">kg</option></select><button type="button" class="delete-set-btn" aria-label="Delete set">-</button>
         </div>
     </template>
+    <div id="calendar-tooltip" class="calendar-tooltip"></div>
     <script src="script.js" type="module"></script>
 </body>
 </html>

@@ -11,6 +11,14 @@
     --text-color: #333;
     --background-color: #fff;
     --border-radius: 6px;
+
+    /* Muscle Group Colors */
+    --color-Chest: #e74c3c;
+    --color-Shoulders: #f39c12;
+    --color-Arms: #f1c40f;
+    --color-Back: #2ecc71;
+    --color-Legs: #3498db;
+    --color-Cardio: #95a5a6;
 }
 
 body {
@@ -79,13 +87,39 @@ body {
 .simple-calendar-day {
     display: flex; justify-content: center; align-items: center; height: 24px; font-size: 0.8em; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;
 }
-.simple-calendar-day:hover { background-color: #f0f0f0; }
+.simple-calendar-day:hover { background-color: #e9ecef; }
 .simple-calendar-day.has-workout {
-    background-color: #9be9a8; color: #1f6032; font-weight: bold;
+    font-weight: bold; color: white;
 }
 .simple-calendar-day.selected-day {
-    background-color: #007bff; color: white;
+    outline: 2px solid var(--secondary-color);
+    outline-offset: -2px;
 }
+
+/* --- Calendar Day Colors --- */
+.workout-color-1 {
+    background-color: var(--c1);
+}
+.workout-color-2 {
+    background: linear-gradient(135deg, var(--c1) 49.5%, var(--c2) 50.5%);
+}
+.workout-color-3 {
+    background: linear-gradient(135deg,
+        var(--c1) 0%, var(--c1) 33%,
+        var(--c2) 33%, var(--c2) 66%,
+        var(--c3) 66%, var(--c3) 100%);
+}
+.workout-color-4 {
+    background-image:
+        linear-gradient(var(--c1), var(--c1)),
+        linear-gradient(var(--c2), var(--c2)),
+        linear-gradient(var(--c3), var(--c3)),
+        linear-gradient(var(--c4), var(--c4));
+    background-size: 50% 50%;
+    background-position: top left, top right, bottom left, bottom right;
+    background-repeat: no-repeat;
+}
+
 
 /* --- Calendar Month/Year Picker Popup --- */
 .simple-calendar-picker {
@@ -105,9 +139,9 @@ body {
 .simple-calendar-picker.visible { display: flex; }
 .simple-calendar-picker select { width: 100%; padding: 5px; }
 .simple-calendar-picker button {
-    padding: 5px 10px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;
+    padding: 5px 10px; background-color: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;
 }
-.simple-calendar-picker button:hover { background-color: #0056b3; }
+.simple-calendar-picker button:hover { background-color: var(--primary-color-hover); }
 
 /* --- Main Layout & Containers --- */
 .main-container {
@@ -119,6 +153,7 @@ body {
 
 /* --- Form Styles --- */
 .form-group { margin-bottom: 15px; }
+.search-container { position: relative; } /* For autocomplete positioning */
 label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--dark-gray-color); }
 input, select, textarea {
     width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;
@@ -132,6 +167,32 @@ button { cursor: pointer; border: none; padding: 10px 15px; border-radius: 4px; 
 }
 .submit-btn:hover { background-color: var(--primary-color-hover); }
 .cancel-btn { display: none; background-color: #6c757d; color: white; }
+
+/* --- Autocomplete Styles --- */
+#autocomplete-results {
+    display: none;
+    position: absolute;
+    width: 100%;
+    background: var(--background-color);
+    border: 1px solid var(--medium-gray-color);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+.autocomplete-item {
+    padding: 10px;
+    cursor: pointer;
+}
+.autocomplete-item:hover {
+    background-color: #f0f0f0;
+}
+.autocomplete-item small {
+    color: var(--dark-gray-color);
+    font-style: italic;
+    margin-left: 8px;
+}
 
 /* --- Quick Add & Sets --- */
 #quick-add-container {
@@ -159,9 +220,24 @@ button { cursor: pointer; border: none; padding: 10px 15px; border-radius: 4px; 
 .display-unit-selector { display: flex; border: 1px solid var(--medium-gray-color); border-radius: var(--border-radius); overflow: hidden; }
 .unit-toggle { padding: 5px 12px; background-color: #f0f0f0; color: var(--dark-gray-color); border-radius: 0; }
 .unit-toggle.active { background-color: var(--primary-color); color: white; }
+
 .exercise-card {
-    border: 1px solid #eee; border-radius: var(--border-radius); padding: 15px; margin-bottom: 15px; background: #fdfdfd; position: relative;
+    border: 1px solid #eee; border-radius: var(--border-radius); padding: 15px 15px 15px 50px; margin-bottom: 15px; background: #fdfdfd; position: relative;
 }
+.drag-handle {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: grab;
+    color: #b0b0b0;
+    font-size: 2rem;
+    padding: 0 10px;
+    line-height: 1;
+}
+.sortable-chosen { cursor: grabbing; }
+.sortable-ghost { opacity: 0.4; background: #c8ebfb; }
+
 .exercise-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 8px; }
 .action-btn { background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 5px; color: #777; }
 .action-btn:hover { color: var(--text-color); }
@@ -172,6 +248,32 @@ button { cursor: pointer; border: none; padding: 10px 15px; border-radius: 4px; 
 }
 .exercise-card p.notes {
     font-style: italic; color: #666; margin: 0; border-top: 1px dashed var(--medium-gray-color); padding-top: 10px; margin-top: 10px;
+}
+
+/* --- Calendar Tooltip --- */
+.calendar-tooltip {
+    display: none;
+    position: absolute;
+    background: rgba(44, 62, 80, 0.9); /* --secondary-color with transparency */
+    color: white;
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    font-size: 0.85em;
+    z-index: 1001;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.calendar-tooltip ul {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+.calendar-tooltip li {
+    margin-bottom: 4px;
+}
+.calendar-tooltip li:last-child {
+    margin-bottom: 0;
 }
 
 /* --- Responsive Design --- */
