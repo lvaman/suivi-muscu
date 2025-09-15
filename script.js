@@ -1,5 +1,14 @@
 // --- Firebase Services ---
-const api = window.firebaseServices;
+import * as api from './firebase-init.js';
+
+// --- Translation Helper ---
+const t = (key) => config.translations[state.language][key] || key;
+
+// --- UI Helper ---
+const toggleActiveButton = (activeButton, inactiveButton) => {
+    activeButton.classList.add('active');
+    inactiveButton.classList.remove('active');
+};
 
 // --- Configuration & Static Data ---
 const config = {
@@ -137,6 +146,12 @@ const config = {
     },
     get englishToFrenchCategoryKey() {
         return Object.fromEntries(Object.entries(this.categoryTranslations).map(([fr, en]) => [en, fr]));
+    },
+    get exerciseNameMap() {
+        return Object.values(this.exercisesData).flat().reduce((acc, ex) => {
+            acc[ex.english] = ex.french;
+            return acc;
+        }, {});
     }
 };
 
@@ -196,26 +211,24 @@ const dom = {
 // --- UI Functions ---
 const ui = {
     updateText() {
-        const lang = state.language;
         document.querySelectorAll('[data-translate-key]').forEach(el => {
             const key = el.getAttribute('data-translate-key');
-            if (!config.translations[lang][key]) return;
             if (el.id === 'submit-workout-btn') {
-                el.textContent = state.editingExerciseIndex !== null ? config.translations[lang].updateExerciseBtn : config.translations[lang].saveExerciseBtn;
+                el.textContent = state.editingExerciseIndex !== null ? t('updateExerciseBtn') : t('saveExerciseBtn');
             } else if (el.id === 'form-title') {
-                el.textContent = state.editingExerciseIndex !== null ? config.translations[lang].editExerciseTitle : config.translations[lang].addExerciseTitle;
+                el.textContent = state.editingExerciseIndex !== null ? t('editExerciseTitle') : t('addExerciseTitle');
             } else if (el.placeholder) {
-                el.placeholder = config.translations[lang][key];
+                el.placeholder = t(key);
             } else {
                 const firstChild = el.childNodes[0];
                 if (firstChild && firstChild.nodeType === Node.TEXT_NODE) {
-                    firstChild.nodeValue = config.translations[lang][key] + ' ';
+                    firstChild.nodeValue = t(key) + ' ';
                 } else {
-                    el.textContent = config.translations[lang][key];
+                    el.textContent = t(key);
                 }
             }
         });
-        document.documentElement.lang = lang;
+        document.documentElement.lang = state.language;
         this.updateDateDisplay();
     },
 
@@ -226,7 +239,7 @@ const ui = {
 
     populateCategoryOptions() {
         const currentVal = dom.categorySelect.value;
-        dom.categorySelect.innerHTML = `<option value="">${config.translations[state.language].chooseCategory}</option>`;
+        dom.categorySelect.innerHTML = `<option value="">${t('chooseCategory')}</option>`;
         for (const key in config.categoryTranslations) {
             const option = document.createElement('option');
             option.value = key;
@@ -241,7 +254,7 @@ const ui = {
         const selectedCategoryKey = dom.categorySelect.value;
         dom.exerciseSelect.innerHTML = "";
         if (!selectedCategoryKey) {
-            dom.exerciseSelect.innerHTML = `<option>${config.translations[state.language].chooseCategory}</option>`;
+            dom.exerciseSelect.innerHTML = `<option>${t('chooseCategory')}</option>`;
             return;
         }
         const exercises = config.exercisesData[selectedCategoryKey] || [];
@@ -286,19 +299,19 @@ const ui = {
         dom.workoutLog.innerHTML = "";
         const exercises = state.currentWorkoutData;
         if (!exercises || exercises.length === 0) {
-            dom.workoutLog.innerHTML = `<p>${config.translations[state.language].noWorkout}</p>`;
+            dom.workoutLog.innerHTML = `<p>${t('noWorkout')}</p>`;
             return;
         }
         exercises.forEach((ex) => {
             const card = document.createElement('div');
             card.className = "exercise-card";
             const categoryDisplay = state.language === 'fr' ? (config.englishToFrenchCategoryKey[ex.category] || ex.category) : ex.category;
-            const exerciseInFrenchObj = Object.values(config.exercisesData).flat().find(e => e.english === ex.name);
-            const exerciseDisplay = state.language === 'fr' ? (exerciseInFrenchObj ? exerciseInFrenchObj.french : ex.name) : ex.name;
+            const exerciseInFrench = config.exerciseNameMap[ex.name];
+            const exerciseDisplay = state.language === 'fr' ? (exerciseInFrench || ex.name) : ex.name;
             const setsList = ex.sets.map(set => {
                 const displayWeight = this.convertWeight(set.weight, set.unit, state.displayUnit);
-                const weightText = set.weight === 0 ? config.translations[state.language].bodyweightDisplay : `${displayWeight} ${state.displayUnit}`;
-                return `<li><span>${config.translations[state.language].setLabel}: ${set.reps} ${config.translations[state.language].repsDisplay}</span> <span>${weightText}</span></li>`;
+                const weightText = set.weight === 0 ? t('bodyweightDisplay') : `${displayWeight} ${state.displayUnit}`;
+                return `<li><span>${t('setLabel')}: ${set.reps} ${t('repsDisplay')}</span> <span>${weightText}</span></li>`;
             }).join('');
 
             card.innerHTML = `
@@ -327,7 +340,7 @@ const ui = {
             calendarWrapper.id = 'calendar-grid-wrapper';
             dom.simpleCalendarContainer.prepend(calendarWrapper);
         }
-        const dayHeaders = config.translations[state.language].dayAbbr
+        const dayHeaders = t('dayAbbr')
             .map(day => `<div class="simple-calendar-weekday">${day}</div>`).join('');
         let html = `
             <div class="simple-calendar-header">
@@ -382,10 +395,6 @@ const ui = {
 
 // --- Event Handlers ---
 const handlers = {
-    handleDateChange() {
-        logic.updateSelectedDate(dom.datePicker.value);
-    },
-
     handleLogActions(e) {
         const target = e.target.closest(".action-btn");
         if (!target) return;
@@ -411,7 +420,7 @@ const handlers = {
             return (reps && weight !== "") ? { reps: parseInt(reps, 10), weight: parseFloat(weight), unit } : null;
         }).filter(Boolean);
 
-        if (sets.length === 0) return alert(config.translations[state.language].alertIncompleteSet);
+        if (sets.length === 0) return alert(t('alertIncompleteSet'));
 
         const categoryKey = dom.categorySelect.value;
         const exerciseIndex = parseInt(dom.exerciseSelect.value, 10);
@@ -462,7 +471,7 @@ const handlers = {
     generateSetsFromQuickAdd() {
         const setCount = parseInt(dom.quickSetsInput.value, 10);
         const repCount = dom.quickRepsInput.value;
-        if (!setCount || !repCount) return alert(config.translations[state.language].alertQuickAdd);
+        if (!setCount || !repCount) return alert(t('alertQuickAdd'));
         const weightValue = dom.bodyweightCheckbox.checked ? "0" : dom.quickWeightInput.value;
         const unitValue = dom.quickUnitSelect.value;
         dom.setsContainer.innerHTML = "";
@@ -525,8 +534,7 @@ const handlers = {
         const workoutData = state.calendar.monthlyWorkouts.get(day.dataset.date);
         if (workoutData) {
             const listItems = workoutData.map(ex => {
-                const exDetails = Object.values(config.exercisesData).flat().find(e => e.english === ex.name);
-                const displayName = state.language === 'fr' ? (exDetails?.french || ex.name) : ex.name;
+                const displayName = state.language === 'fr' ? (config.exerciseNameMap[ex.name] || ex.name) : ex.name;
                 let colorCategory = ex.category;
                 if (colorCategory === 'Biceps' || colorCategory === 'Triceps') {
                     colorCategory = 'Arms';
@@ -596,7 +604,7 @@ const logic = {
 
     setupEventListeners() {
         document.addEventListener('keydown', handlers.handleKeyDown);
-        dom.datePicker.addEventListener('change', handlers.handleDateChange);
+        dom.datePicker.addEventListener('change', (e) => this.updateSelectedDate(e.target.value));
         dom.prevDayBtn.addEventListener('click', () => this.navigateDays(-1));
         dom.nextDayBtn.addEventListener('click', () => this.navigateDays(1));
 
@@ -664,8 +672,10 @@ const logic = {
     setLanguage(lang) {
         if (state.language === lang) return;
         state.language = lang;
-        dom.langFrButton.classList.toggle('active', 'fr' === lang);
-        dom.langEnButton.classList.toggle('active', 'en' === lang);
+        toggleActiveButton(
+            lang === 'fr' ? dom.langFrButton : dom.langEnButton,
+            lang === 'fr' ? dom.langEnButton : dom.langFrButton
+        );
         ui.populateCategoryOptions();
         ui.updateExerciseOptions();
         ui.updateText();
@@ -676,8 +686,10 @@ const logic = {
     setDisplayUnit(unit) {
         if (state.displayUnit === unit) return;
         state.displayUnit = unit;
-        dom.displayKgButton.classList.toggle('active', 'kg' === unit);
-        dom.displayLbsButton.classList.toggle('active', 'lbs' === unit);
+        toggleActiveButton(
+            unit === 'kg' ? dom.displayKgButton : dom.displayLbsButton,
+            unit === 'kg' ? dom.displayLbsButton : dom.displayKgButton
+        );
         ui.renderWorkoutLog();
     },
 
@@ -701,7 +713,7 @@ const logic = {
     },
 
     async deleteExercise(index) {
-        if (!confirm(config.translations[state.language].deleteConfirm)) return;
+        if (!confirm(t('deleteConfirm'))) return;
 
         const updatedExercises = [...state.currentWorkoutData];
         updatedExercises.splice(index, 1);
@@ -709,10 +721,8 @@ const logic = {
         const docRef = api.doc(api.db, "daily_workouts", state.currentDate);
 
         if (updatedExercises.length > 0) {
-            // If exercises remain, update the document
             await api.setDoc(docRef, { exercises: updatedExercises });
         } else {
-            // If this was the last exercise, delete the entire document
             await api.deleteDoc(docRef);
         }
     },
