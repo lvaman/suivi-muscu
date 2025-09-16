@@ -72,9 +72,12 @@
             <div id="workout-log-container">
                 <div class="workout-log-header">
                     <h2 data-translate-key="workoutOf">Workout for <span id="log-date"></span></h2>
-                    <div class="display-unit-selector">
-                        <button id="display-kg" class="unit-toggle">kg</button>
-                        <button id="display-lbs" class="unit-toggle active">lbs</button>
+                    <div class="header-actions">
+                        <button id="import-workout-btn" class="import-btn" data-translate-key="importBtn" title="Import from another day">Import</button>
+                        <div class="display-unit-selector">
+                            <button id="display-kg" class="unit-toggle">kg</button>
+                            <button id="display-lbs" class="unit-toggle active">lbs</button>
+                        </div>
                     </div>
                 </div>
                 <div id="workout-log"></div>
@@ -95,6 +98,19 @@
 
     <!-- Tooltip for the calendar -->
     <div id="calendar-tooltip" class="calendar-tooltip"></div>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 data-translate-key="importModalTitle">Import Workout</h3>
+            <p data-translate-key="importModalDesc">Select a date to copy the workout from.</p>
+            <input type="date" id="import-date-picker">
+            <div class="modal-actions">
+                <button id="import-cancel-btn" class="cancel-btn" data-translate-key="cancelBtn">Cancel</button>
+                <button id="import-confirm-btn" class="submit-btn" data-translate-key="importBtn">Import</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Main application script -->
     <script src="script.js" type="module"></script>

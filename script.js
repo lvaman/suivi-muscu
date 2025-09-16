@@ -43,7 +43,13 @@ const config = {
             deleteConfirm: "Êtes-vous sûr de vouloir supprimer cet exercice ?",
             alertIncompleteSet: "Veuillez ajouter au moins une série valide.",
             alertQuickAdd: "Veuillez entrer un nombre valide de séries et de répétitions.",
-            dayAbbr: ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+            dayAbbr: ['L', 'M', 'M', 'J', 'V', 'S', 'D'],
+            importBtn: "Importer",
+            cancelBtn: "Annuler",
+            importModalTitle: "Importer un entraînement",
+            importModalDesc: "Sélectionnez une date pour copier l'entraînement.",
+            importSuccess: "Entraînement importé avec succès !",
+            importNoData: "Aucun entraînement trouvé à cette date."
         },
         en: {
             mainTitle: "Fitness Tracker 🏋️‍♂️",
@@ -74,7 +80,13 @@ const config = {
             deleteConfirm: "Are you sure you want to delete this exercise?",
             alertIncompleteSet: "Please add at least one valid set.",
             alertQuickAdd: "Please enter a valid number of sets and repetitions.",
-            dayAbbr: ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+            dayAbbr: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+            importBtn: "Import",
+            cancelBtn: "Cancel",
+            importModalTitle: "Import Workout",
+            importModalDesc: "Select a date to copy the workout from.",
+            importSuccess: "Workout imported successfully!",
+            importNoData: "No workout found on that date."
         }
     },
     categoryTranslations: {
@@ -206,6 +218,11 @@ const dom = {
     yearSelect: document.getElementById('year-select'),
     pickerGoBtn: document.getElementById('picker-go-btn'),
     calendarTooltip: document.getElementById('calendar-tooltip'),
+    importWorkoutBtn: document.getElementById('import-workout-btn'),
+    importModal: document.getElementById('import-modal'),
+    importDatePicker: document.getElementById('import-date-picker'),
+    importConfirmBtn: document.getElementById('import-confirm-btn'),
+    importCancelBtn: document.getElementById('import-cancel-btn'),
 };
 
 // --- UI Functions ---
@@ -374,6 +391,13 @@ const ui = {
         calendarWrapper.innerHTML = html;
     },
 
+    toggleModal(modal, show) {
+        modal.classList.toggle('hidden', !show);
+        if (show) {
+            modal.querySelector('input, button').focus();
+        }
+    },
+
     togglePicker(show) {
         dom.calendarPicker.classList.toggle('visible', show);
     },
@@ -518,9 +542,10 @@ const handlers = {
     },
 
     handleKeyDown(e) {
-        if (e.key === 'Escape' && dom.calendarPicker.classList.contains('visible')) {
-            ui.togglePicker(false);
-            return;
+        if (e.key === 'Escape') {
+             if (dom.calendarPicker.classList.contains('visible')) ui.togglePicker(false);
+             if (!dom.importModal.classList.contains('hidden')) ui.toggleModal(dom.importModal, false);
+             return;
         }
         const isInputFocused = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
         if (isInputFocused) return;
@@ -629,12 +654,22 @@ const logic = {
         dom.exerciseSearch.addEventListener('input', handlers.handleExerciseSearch);
         dom.autocompleteResults.addEventListener('click', handlers.handleAutocompleteClick);
 
+        dom.importWorkoutBtn.addEventListener('click', () => {
+            dom.importDatePicker.value = '';
+            ui.toggleModal(dom.importModal, true);
+        });
+        dom.importCancelBtn.addEventListener('click', () => ui.toggleModal(dom.importModal, false));
+        dom.importConfirmBtn.addEventListener('click', () => this.importWorkout());
+
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.search-container')) {
                  dom.autocompleteResults.style.display = 'none';
             }
             if (dom.calendarPicker.classList.contains('visible') && !e.target.closest('#simple-calendar-container')) {
                 ui.togglePicker(false);
+            }
+            if (!dom.importModal.classList.contains('hidden') && e.target === dom.importModal) {
+                ui.toggleModal(dom.importModal, false);
             }
         });
     },
@@ -743,6 +778,30 @@ const logic = {
                 ui.renderCalendarGrid();
             }
         });
+    },
+
+    async importWorkout() {
+        const sourceDate = dom.importDatePicker.value;
+        if (!sourceDate) return;
+
+        const sourceDocRef = api.doc(api.db, "daily_workouts", sourceDate);
+        const sourceDocSnap = await api.getDoc(sourceDocRef);
+
+        if (!sourceDocSnap.exists() || !sourceDocSnap.data().exercises) {
+            alert(t('importNoData'));
+            return;
+        }
+
+        const exercisesToCopy = sourceDocSnap.data().exercises;
+        const destinationDate = state.currentDate;
+        const destDocRef = api.doc(api.db, "daily_workouts", destinationDate);
+
+        await api.setDoc(destDocRef, {
+            exercises: api.arrayUnion(...exercisesToCopy)
+        }, { merge: true });
+
+        ui.toggleModal(dom.importModal, false);
+        alert(t('importSuccess'));
     },
 
     navigateDays(days) {
