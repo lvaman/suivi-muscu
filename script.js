@@ -768,15 +768,13 @@ const logic = {
         state.firestoreUnsubscribe = api.onSnapshot(docRef, docSnap => {
             state.currentWorkoutData = docSnap.exists() ? docSnap.data().exercises : [];
             ui.renderWorkoutLog();
-            if (!docSnap.metadata.hasPendingWrites) {
-                const exercises = state.currentWorkoutData;
-                if (exercises && exercises.length > 0) {
-                    state.calendar.monthlyWorkouts.set(docSnap.id, exercises);
-                } else {
-                    state.calendar.monthlyWorkouts.delete(docSnap.id);
-                }
-                ui.renderCalendarGrid();
+            const exercises = state.currentWorkoutData;
+            if (exercises && exercises.length > 0) {
+                state.calendar.monthlyWorkouts.set(docSnap.id, exercises);
+            } else {
+                state.calendar.monthlyWorkouts.delete(docSnap.id);
             }
+            ui.renderCalendarGrid();
         });
     },
 
