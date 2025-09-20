@@ -727,8 +727,18 @@ const logic = {
         dom.autocompleteResults.addEventListener('click', handlers.handleAutocompleteClick);
 
         dom.importWorkoutBtn.addEventListener('click', () => {
-            dom.importDatePicker.value = '';
+            dom.importDatePicker.value = state.currentDate;
             ui.toggleModal(dom.importModal, true);
+            if (dom.importDatePicker.showPicker) {
+                try {
+                    dom.importDatePicker.showPicker();
+                } catch (error) {
+                    console.warn("Could not programmatically open date picker:", error);
+                    dom.importDatePicker.focus();
+                }
+            } else {
+                dom.importDatePicker.focus();
+            }
         });
         dom.importCancelBtn.addEventListener('click', () => ui.toggleModal(dom.importModal, false));
         dom.importConfirmBtn.addEventListener('click', () => this.importWorkout());
