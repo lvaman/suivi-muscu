@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="style.css">
     <!-- SortableJS for drag-and-drop functionality -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <!-- Chart.js for progress visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div id="app-container">
@@ -108,6 +110,40 @@
             <div class="modal-actions">
                 <button id="import-cancel-btn" class="cancel-btn" data-translate-key="cancelBtn">Cancel</button>
                 <button id="import-confirm-btn" class="submit-btn" data-translate-key="importBtn">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Chart Modal -->
+    <div id="progress-modal" class="modal-overlay hidden">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3 id="progress-modal-title">Progress: Exercise Name</h3>
+                <button id="progress-modal-close" class="modal-close-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div id="progress-chart-controls">
+                <button class="metric-btn active" data-metric="maxWeight">Max Weight</button>
+                <button class="metric-btn" data-metric="totalVolume">Total Volume</button>
+                <button class="metric-btn" data-metric="est1RM">Best Set (Est. 1RM)</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="progress-chart-canvas"></canvas>
+            </div>
+            <div class="history-table-container">
+                <h4>Recent History</h4>
+                <table id="progress-history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Top Set</th>
+                            <th>Total Volume</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows will be populated dynamically -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

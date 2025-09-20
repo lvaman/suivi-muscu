@@ -119,8 +119,13 @@ const config = {
             { french: 'Tirage vertical (unilatéral)', english: 'Single-Arm Lat Pulldown' },
             { french: 'Rowing barre', english: 'Barbell Row' },
             { french: 'Rowing haltère (unilatéral)', english: 'Single-Arm Dumbbell Row' },
-            { french: 'Tirage horizontal (2 mains)', english: 'Seated Cable Row (2 hands)' },
-            { french: 'Tirage horizontal à la poulie (unilatéral)', english: 'Single-Arm Cable Row' }
+            { french: 'Tirage horizontal à la poulie', english: 'Seated Cable Row' },
+            { french: 'Tirage horizontal à la poulie (unilatéral)', english: 'Single-Arm Cable Row' },
+            { french: 'Tirage horizontal à la machine (prise neutre)', english: 'Seated Machine Row (neutral grip)' },
+            { french: 'Tirage horizontal à la machine (prise pronation)', english: 'Seated Machine Row (pronated grip)' },
+            { french: 'Tirage horizontal à la machine (unilatéral prise neutre)', english: 'Single-Arm Seated Machine Row (neutral grip)' },
+            { french: 'Tirage horizontal à la machine (unilatéral prise pronation)', english: 'Single-Arm Seated Machine Row (pronated grip)' },
+            { french: 'Élévation latérale à la poulie (unilatéral)', english: 'Single-Arm Cable Rear Delt Fly' }
         ],
         'Jambes': [
             { french: 'Squat', english: 'Squat' },
@@ -180,7 +185,9 @@ const state = {
         year: new Date().getFullYear(),
         month: new Date().getMonth(),
         monthlyWorkouts: new Map()
-    }
+    },
+    chartInstance: null,
+    progressData: []
 };
 
 // --- DOM Element References ---
@@ -223,6 +230,12 @@ const dom = {
     importDatePicker: document.getElementById('import-date-picker'),
     importConfirmBtn: document.getElementById('import-confirm-btn'),
     importCancelBtn: document.getElementById('import-cancel-btn'),
+    progressModal: document.getElementById('progress-modal'),
+    progressModalTitle: document.getElementById('progress-modal-title'),
+    progressModalClose: document.getElementById('progress-modal-close'),
+    progressChartControls: document.getElementById('progress-chart-controls'),
+    progressChartCanvas: document.getElementById('progress-chart-canvas'),
+    progressHistoryTable: document.getElementById('progress-history-table').querySelector('tbody'),
 };
 
 // --- UI Functions ---
@@ -334,6 +347,7 @@ const ui = {
             card.innerHTML = `
                 <div class="drag-handle" aria-label="Drag to reorder">⠿</div>
                 <div class="exercise-actions">
+                    <button class="action-btn progress-btn" title="Progress" aria-label="View progress" data-exercise-name="${ex.name}">📈</button>
                     <button class="action-btn edit-btn" title="Edit" aria-label="Edit exercise">✏️</button>
                     <button class="action-btn delete-btn" title="Delete" aria-label="Delete exercise">🗑️</button>
                 </div>
@@ -391,6 +405,57 @@ const ui = {
         calendarWrapper.innerHTML = html;
     },
 
+    // Function to render the progress chart and table
+    renderProgressChartAndTable(metric = 'maxWeight') {
+        if (state.chartInstance) {
+            state.chartInstance.destroy();
+        }
+        dom.progressChartControls.querySelectorAll('.metric-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.metric === metric);
+        });
+        const labels = state.progressData.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', day: 'numeric' }));
+        const dataPoints = state.progressData.map(d => d[metric]);
+        const metricBtn = dom.progressChartControls.querySelector(`[data-metric="${metric}"]`);
+        const labelText = metricBtn ? metricBtn.textContent : 'Metric';
+
+        state.chartInstance = new Chart(dom.progressChartCanvas, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: labelText,
+                    data: dataPoints,
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    backgroundColor: 'rgba(52, 152, 219, 0.2)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(1) + (metric !== 'totalVolume' ? ` ${state.displayUnit}` : '');
+                            }
+                        }
+                     }
+                }
+            }
+        });
+        dom.progressHistoryTable.innerHTML = state.progressData.map(d => `
+            <tr>
+                <td>${new Date(d.date + 'T12:00:00').toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                <td>${d.topSet}</td>
+                <td>${d.totalVolume.toFixed(0)} lbs</td>
+                <td>${d.notes}</td>
+            </tr>
+        `).join('');
+    },
+
     toggleModal(modal, show) {
         modal.classList.toggle('hidden', !show);
         if (show) {
@@ -422,6 +487,12 @@ const handlers = {
     handleLogActions(e) {
         const target = e.target.closest(".action-btn");
         if (!target) return;
+
+        if (target.classList.contains("progress-btn")) {
+            const exerciseName = target.dataset.exerciseName;
+            logic.openProgressModal(exerciseName);
+            return;
+        }
 
         const card = e.target.closest('.exercise-card');
         if (!card) return;
@@ -545,6 +616,7 @@ const handlers = {
         if (e.key === 'Escape') {
              if (dom.calendarPicker.classList.contains('visible')) ui.togglePicker(false);
              if (!dom.importModal.classList.contains('hidden')) ui.toggleModal(dom.importModal, false);
+             if (!dom.progressModal.classList.contains('hidden')) ui.toggleModal(dom.progressModal, false);
              return;
         }
         const isInputFocused = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
@@ -660,6 +732,18 @@ const logic = {
         });
         dom.importCancelBtn.addEventListener('click', () => ui.toggleModal(dom.importModal, false));
         dom.importConfirmBtn.addEventListener('click', () => this.importWorkout());
+
+        dom.progressModalClose.addEventListener('click', () => ui.toggleModal(dom.progressModal, false));
+        dom.progressModal.addEventListener('click', (e) => {
+            if (e.target === dom.progressModal) {
+                ui.toggleModal(dom.progressModal, false);
+            }
+        });
+        dom.progressChartControls.addEventListener('click', (e) => {
+            if (e.target.matches('.metric-btn')) {
+                ui.renderProgressChartAndTable(e.target.dataset.metric);
+            }
+        });
 
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.search-container')) {
@@ -851,7 +935,60 @@ const logic = {
         }
 
         return { className, style };
-    }
+    },
+
+    async openProgressModal(exerciseName) {
+        const exerciseInFrench = config.exerciseNameMap[exerciseName] || exerciseName;
+        const exerciseDisplay = state.language === 'fr' ? exerciseInFrench : exerciseName;
+        dom.progressModalTitle.textContent = `Progress: ${exerciseDisplay}`;
+
+        const q = api.query(api.collection(api.db, 'daily_workouts'));
+        const querySnapshot = await api.getDocs(q);
+
+        const history = [];
+        querySnapshot.forEach(doc => {
+            const workoutDate = doc.id;
+            const exercises = doc.data().exercises || [];
+            const targetExercise = exercises.find(ex => ex.name === exerciseName);
+
+            if (targetExercise) {
+                history.push(this.processExerciseInstance(targetExercise, workoutDate));
+            }
+        });
+
+        state.progressData = history.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        ui.renderProgressChartAndTable('maxWeight');
+        ui.toggleModal(dom.progressModal, true);
+    },
+
+    processExerciseInstance(ex, date) {
+        const setsInLbs = ex.sets.map(set => ({
+            reps: set.reps,
+            weight: set.unit === 'kg' ? set.weight * config.KG_TO_LBS : set.weight
+        }));
+
+        const est1RM = Math.max(...setsInLbs.map(set => this.calculateEst1RM(set.weight, set.reps)));
+        const totalVolume = setsInLbs.reduce((sum, set) => sum + (set.weight * set.reps), 0);
+        const maxWeight = Math.max(...setsInLbs.map(set => set.weight));
+        const topSetRaw = setsInLbs.reduce((best, current) => this.calculateEst1RM(current.weight, current.reps) > this.calculateEst1RM(best.weight, best.reps) ? current : best, setsInLbs[0]);
+
+        return {
+            date,
+            notes: ex.notes || '',
+            maxWeight: parseFloat(ui.convertWeight(maxWeight, 'lbs', state.displayUnit)),
+            totalVolume: parseFloat(ui.convertWeight(totalVolume, 'lbs', state.displayUnit)),
+            est1RM: parseFloat(ui.convertWeight(est1RM, 'lbs', state.displayUnit)),
+            topSet: `${topSetRaw.reps} ${t('repsDisplay')} @ ${topSetRaw.weight.toFixed(1)} lbs`
+        };
+    },
+
+    // Estimated 1-Rep Max (Epley Formula)
+    calculateEst1RM(weight, reps) {
+        if (reps == 1) return weight;
+        if (weight <= 0 || reps <= 0) return 0;
+        return weight * (1 + reps / 30);
+    },
 };
 
 // --- Application Entry Point ---
