@@ -706,9 +706,13 @@ const logic = {
         dom.nextDayBtn.addEventListener('click', () => this.navigateDays(1));
 
         dom.simpleCalendarContainer.addEventListener('click', handlers.handleCalendarActions);
-        dom.simpleCalendarContainer.addEventListener('mouseover', handlers.handleCalendarMouseOver);
-        dom.simpleCalendarContainer.addEventListener('mouseout', handlers.handleCalendarMouseOut);
-        dom.simpleCalendarContainer.addEventListener('mousemove', handlers.handleCalendarMouseMove);
+
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (!isTouchDevice) {
+            dom.simpleCalendarContainer.addEventListener('mouseover', handlers.handleCalendarMouseOver);
+            dom.simpleCalendarContainer.addEventListener('mouseout', handlers.handleCalendarMouseOut);
+            dom.simpleCalendarContainer.addEventListener('mousemove', handlers.handleCalendarMouseMove);
+        }
 
         dom.pickerGoBtn.addEventListener('click', handlers.handlePickerGo);
         dom.categorySelect.addEventListener('change', ui.updateExerciseOptions);
