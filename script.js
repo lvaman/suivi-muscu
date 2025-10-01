@@ -10,6 +10,9 @@ const toggleActiveButton = (activeButton, inactiveButton) => {
     inactiveButton.classList.remove('active');
 };
 
+// --- Admin User ID ---
+const ADMIN_UID = "fWPQ0nKpYGPZdMcT7mKQivq8b7j2";
+
 // --- Configuration & Static Data ---
 const config = {
     KG_TO_LBS: 2.20462,
@@ -49,7 +52,11 @@ const config = {
             importModalTitle: "Importer un entraînement",
             importModalDesc: "Sélectionnez une date pour copier l'entraînement.",
             importSuccess: "Entraînement importé avec succès !",
-            importNoData: "Aucun entraînement trouvé à cette date."
+            importNoData: "Aucun entraînement trouvé à cette date.",
+            loginBtn: "Connexion",
+            loginEmailPlaceholder: "Email",
+            loginPasswordPlaceholder: "Mot de passe",
+            logoutBtn: "Déconnexion"
         },
         en: {
             mainTitle: "Fitness Tracker 🏋️‍♂️",
@@ -86,7 +93,11 @@ const config = {
             importModalTitle: "Import Workout",
             importModalDesc: "Select a date to copy the workout from.",
             importSuccess: "Workout imported successfully!",
-            importNoData: "No workout found on that date."
+            importNoData: "No workout found on that date.",
+            loginBtn: "Login",
+            loginEmailPlaceholder: "Email",
+            loginPasswordPlaceholder: "Password",
+            logoutBtn: "Logout"
         }
     },
     categoryTranslations: {
@@ -125,7 +136,8 @@ const config = {
             { french: 'Tirage horizontal à la machine (prise pronation)', english: 'Seated Machine Row (pronated grip)' },
             { french: 'Tirage horizontal à la machine (unilatéral prise neutre)', english: 'Single-Arm Seated Machine Row (neutral grip)' },
             { french: 'Tirage horizontal à la machine (unilatéral prise pronation)', english: 'Single-Arm Seated Machine Row (pronated grip)' },
-            { french: 'Élévation latérale à la poulie (unilatéral)', english: 'Single-Arm Cable Rear Delt Fly' }
+            { french: 'Élévation latérale à la poulie (unilatéral)', english: 'Single-Arm Cable Rear Delt Fly' },
+            { french: 'Élévation latérale haltère', english: 'Dumbbell Rear Delt Fly' }
         ],
         'Jambes': [
             { french: 'Squat', english: 'Squat' },
@@ -174,6 +186,7 @@ const config = {
 
 // --- Application State ---
 const state = {
+    user: null,
     language: 'en',
     displayUnit: 'lbs',
     currentDate: new Date().toISOString().split('T')[0],
@@ -192,6 +205,14 @@ const state = {
 
 // --- DOM Element References ---
 const dom = {
+    appContainer: document.getElementById('app-container'),
+    loginArea: document.getElementById('login-area'),
+    logoutArea: document.getElementById('logout-area'),
+    loginBtn: document.getElementById('login-btn'),
+    logoutBtn: document.getElementById('logout-btn'),
+    loginEmailInput: document.getElementById('login-email'),
+    loginPasswordInput: document.getElementById('login-password'),
+    authStatus: document.getElementById('auth-status'),
     datePicker: document.getElementById('date-picker'),
     categorySelect: document.getElementById('category-select'),
     exerciseSelect: document.getElementById('exercise-select'),
@@ -494,6 +515,9 @@ const handlers = {
             return;
         }
 
+        // Prevent guests from editing/deleting
+        if (!state.user) return;
+
         const card = e.target.closest('.exercise-card');
         if (!card) return;
 
@@ -508,6 +532,11 @@ const handlers = {
 
     async handleWorkoutSubmit(e) {
         e.preventDefault();
+        if (!state.user) {
+            alert("You must be logged in as an admin to save workouts.");
+            return;
+        }
+
         const sets = Array.from(dom.setsContainer.querySelectorAll('.set-row')).map(row => {
             const reps = row.querySelector('.reps-input').value;
             const weight = row.querySelector('.weight-input').value;
@@ -656,6 +685,7 @@ const handlers = {
 // --- Core Application Logic ---
 const logic = {
     initialize() {
+        this.listenForAuthChanges();
         this.flattenExercises();
         this.initializeDragAndDrop();
         dom.datePicker.value = state.currentDate;
@@ -666,6 +696,27 @@ const logic = {
         this.fetchAndRenderCalendar();
         this.loadWorkoutsForDate(state.currentDate);
         this.setupEventListeners();
+    },
+
+    listenForAuthChanges() {
+        api.onAuthStateChanged(api.auth, user => {
+            if (user && user.uid === ADMIN_UID) {
+                state.user = user;
+                document.body.classList.remove('is-guest');
+                dom.loginArea.classList.add('hidden');
+                dom.logoutArea.classList.remove('hidden');
+                dom.authStatus.textContent = `Admin: ${user.email}`;
+            } else {
+                state.user = null;
+                document.body.classList.add('is-guest');
+                dom.loginArea.classList.remove('hidden');
+                dom.logoutArea.classList.add('hidden');
+                dom.authStatus.textContent = '';
+                if (user) {
+                   api.signOut(api.auth);
+                }
+            }
+        });
     },
 
     flattenExercises() {
@@ -694,12 +745,15 @@ const logic = {
     },
 
     async saveWorkoutOrder() {
-        if (!state.currentWorkoutData) return;
+        if (!state.user || !state.currentWorkoutData) return;
         const docRef = api.doc(api.db, "daily_workouts", state.currentDate);
         await api.setDoc(docRef, { exercises: state.currentWorkoutData }, { merge: true });
     },
 
     setupEventListeners() {
+        dom.loginBtn.addEventListener('click', this.handleLogin);
+        dom.logoutBtn.addEventListener('click', () => api.signOut(api.auth));
+
         document.addEventListener('keydown', handlers.handleKeyDown);
         dom.datePicker.addEventListener('change', (e) => this.updateSelectedDate(e.target.value));
         dom.prevDayBtn.addEventListener('click', () => this.navigateDays(-1));
@@ -731,6 +785,7 @@ const logic = {
         dom.autocompleteResults.addEventListener('click', handlers.handleAutocompleteClick);
 
         dom.importWorkoutBtn.addEventListener('click', () => {
+            if (!state.user) return alert("You must be logged in as an admin to import workouts.");
             dom.importDatePicker.value = state.currentDate;
             ui.toggleModal(dom.importModal, true);
             if (dom.importDatePicker.showPicker) {
@@ -770,6 +825,18 @@ const logic = {
                 ui.toggleModal(dom.importModal, false);
             }
         });
+    },
+
+    async handleLogin() {
+        const email = dom.loginEmailInput.value;
+        const password = dom.loginPasswordInput.value;
+        if (!email || !password) return alert("Please enter email and password.");
+        try {
+            await api.signInWithEmailAndPassword(api.auth, email, password);
+            // onAuthStateChanged will handle the UI update
+        } catch(error) {
+            alert(`Error logging in: ${error.message}`);
+        }
     },
 
     async fetchAndRenderCalendar() {
@@ -827,6 +894,7 @@ const logic = {
     },
 
     startEditExercise(index) {
+        if (!state.user) return;
         state.editingExerciseIndex = index;
         const ex = state.currentWorkoutData[index];
         const categoryKeyInFrench = config.englishToFrenchCategoryKey[ex.category];
@@ -846,7 +914,7 @@ const logic = {
     },
 
     async deleteExercise(index) {
-        if (!confirm(t('deleteConfirm'))) return;
+        if (!state.user || !confirm(t('deleteConfirm'))) return;
 
         const updatedExercises = [...state.currentWorkoutData];
         updatedExercises.splice(index, 1);
@@ -877,6 +945,7 @@ const logic = {
     },
 
     async importWorkout() {
+        if (!state.user) return;
         const sourceDate = dom.importDatePicker.value;
         if (!sourceDate) return;
 

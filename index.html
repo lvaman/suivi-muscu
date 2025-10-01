@@ -10,9 +10,31 @@
     <!-- Chart.js for progress visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
+<body class="is-guest"> <!-- Start in guest mode -->
     <div id="app-container">
         <header class="header">
+            <div class="header-top-right">
+                <!-- Language Selector -->
+                <div class="language-selector">
+                    <img src="https://flagcdn.com/fr.svg" alt="Français" id="lang-fr" class="flag">
+                    <img src="https://flagcdn.com/us.svg" alt="English" id="lang-en" class="flag active">
+                </div>
+                <!-- Authentication -->
+                <div id="auth-container">
+                     <div id="login-area">
+                        <div id="login-form">
+                            <input type="email" id="login-email" data-translate-key="loginEmailPlaceholder" placeholder="Email" required>
+                            <input type="password" id="login-password" data-translate-key="loginPasswordPlaceholder" placeholder="Password" required>
+                        </div>
+                        <button id="login-btn" data-translate-key="loginBtn">Login</button>
+                    </div>
+                    <div id="logout-area" class="hidden">
+                        <span id="auth-status"></span>
+                        <button id="logout-btn" data-translate-key="logoutBtn">Logout</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Calendar Component -->
             <div id="simple-calendar-container">
                 <div id="calendar-picker" class="simple-calendar-picker">
@@ -20,12 +42,6 @@
                     <select id="year-select"></select>
                     <button id="picker-go-btn">OK</button>
                 </div>
-            </div>
-
-            <!-- Language Selector -->
-            <div class="language-selector">
-                <img src="https://flagcdn.com/fr.svg" alt="Français" id="lang-fr" class="flag">
-                <img src="https://flagcdn.com/us.svg" alt="English" id="lang-en" class="flag active">
             </div>
 
             <h1 data-translate-key="mainTitle">Fitness Tracker 🏋️‍♂️</h1>
