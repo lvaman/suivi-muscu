@@ -56,7 +56,16 @@ const config = {
             loginBtn: "Connexion",
             loginEmailPlaceholder: "Email",
             loginPasswordPlaceholder: "Mot de passe",
-            logoutBtn: "Déconnexion"
+            logoutBtn: "Déconnexion",
+            progressTitle: "Progrès :",
+            progressMaxWeight: "Poids Max",
+            progressTotalVolume: "Volume Total",
+            progressEst1RM: "Meilleure Série (Est. 1RM)",
+            progressRecentHistory: "Historique",
+            progressTblHeaderDate: "Date",
+            progressTblHeaderTopSet: "Meilleure Série",
+            progressTblHeaderTotalVolume: "Volume Total",
+            progressTblHeaderNotes: "Notes"
         },
         en: {
             mainTitle: "Fitness Tracker 🏋️‍♂️",
@@ -97,7 +106,16 @@ const config = {
             loginBtn: "Login",
             loginEmailPlaceholder: "Email",
             loginPasswordPlaceholder: "Password",
-            logoutBtn: "Logout"
+            logoutBtn: "Logout",
+            progressTitle: "Progress:",
+            progressMaxWeight: "Max Weight",
+            progressTotalVolume: "Total Volume",
+            progressEst1RM: "Best Set (Est. 1RM)",
+            progressRecentHistory: "Recent History",
+            progressTblHeaderDate: "Date",
+            progressTblHeaderTopSet: "Top Set",
+            progressTblHeaderTotalVolume: "Total Volume",
+            progressTblHeaderNotes: "Notes"
         }
     },
     categoryTranslations: {
@@ -434,15 +452,28 @@ const ui = {
         dom.progressChartControls.querySelectorAll('.metric-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.metric === metric);
         });
-        const labels = state.progressData.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', day: 'numeric' }));
-        const dataPoints = state.progressData.map(d => d[metric]);
-        const metricBtn = dom.progressChartControls.querySelector(`[data-metric="${metric}"]`);
-        const labelText = metricBtn ? metricBtn.textContent : 'Metric';
+
+        // Create data points as {x, y} objects, using a timestamp for x.
+        // This allows the x-axis to be a linear time scale.
+        const dataPoints = state.progressData.map(d => ({
+            x: new Date(d.date + 'T12:00:00').getTime(),
+            y: d[metric]
+        }));
+
+        let labelKey;
+        if (metric === 'maxWeight') {
+            labelKey = 'progressMaxWeight';
+        } else if (metric === 'totalVolume') {
+            labelKey = 'progressTotalVolume';
+        } else {
+            labelKey = 'progressEst1RM';
+        }
+        const labelText = t(labelKey);
+        const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
 
         state.chartInstance = new Chart(dom.progressChartCanvas, {
             type: 'line',
             data: {
-                labels: labels,
                 datasets: [{
                     label: labelText,
                     data: dataPoints,
@@ -456,14 +487,39 @@ const ui = {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
+                    x: {
+                        type: 'linear',
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            callback: function(value) {
+                                return new Date(value).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
                     y: {
-                        beginAtZero: false,
+                        beginAtZero: true,
                         ticks: {
                             callback: function(value) {
                                 return value.toFixed(1) + (metric !== 'totalVolume' ? ` ${state.displayUnit}` : '');
                             }
                         }
                      }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            // Format the tooltip title from the timestamp
+                            title: function(context) {
+                                const timestamp = context[0].parsed.x;
+                                return new Date(timestamp).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -471,7 +527,7 @@ const ui = {
             <tr>
                 <td>${new Date(d.date + 'T12:00:00').toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
                 <td>${d.topSet}</td>
-                <td>${d.totalVolume.toFixed(0)} lbs</td>
+                <td>${d.totalVolume.toFixed(0)} ${state.displayUnit}</td>
                 <td>${d.notes}</td>
             </tr>
         `).join('');
@@ -1023,7 +1079,7 @@ const logic = {
     async openProgressModal(exerciseName) {
         const exerciseInFrench = config.exerciseNameMap[exerciseName] || exerciseName;
         const exerciseDisplay = state.language === 'fr' ? exerciseInFrench : exerciseName;
-        dom.progressModalTitle.textContent = `Progress: ${exerciseDisplay}`;
+        dom.progressModalTitle.textContent = `${t('progressTitle')} ${exerciseDisplay}`;
 
         const q = api.query(api.collection(api.db, 'daily_workouts'));
         const querySnapshot = await api.getDocs(q);
@@ -1055,6 +1111,7 @@ const logic = {
         const totalVolume = setsInLbs.reduce((sum, set) => sum + (set.weight * set.reps), 0);
         const maxWeight = Math.max(...setsInLbs.map(set => set.weight));
         const topSetRaw = setsInLbs.reduce((best, current) => this.calculateEst1RM(current.weight, current.reps) > this.calculateEst1RM(best.weight, best.reps) ? current : best, setsInLbs[0]);
+        const topSetDisplayWeight = ui.convertWeight(topSetRaw.weight, 'lbs', state.displayUnit);
 
         return {
             date,
@@ -1062,7 +1119,7 @@ const logic = {
             maxWeight: parseFloat(ui.convertWeight(maxWeight, 'lbs', state.displayUnit)),
             totalVolume: parseFloat(ui.convertWeight(totalVolume, 'lbs', state.displayUnit)),
             est1RM: parseFloat(ui.convertWeight(est1RM, 'lbs', state.displayUnit)),
-            topSet: `${topSetRaw.reps} ${t('repsDisplay')} @ ${topSetRaw.weight.toFixed(1)} lbs`
+            topSet: `${topSetRaw.reps} ${t('repsDisplay')} @ ${topSetDisplayWeight} ${state.displayUnit}`
         };
     },
 
