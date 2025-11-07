@@ -437,6 +437,7 @@ textarea { resize: vertical; min-height: 60px; }
 .history-table-container {
     max-height: 200px;
     overflow-y: auto;
+    touch-action: pan-y;
     border-top: 1px solid var(--medium-gray-color);
     padding-top: 10px;
 }

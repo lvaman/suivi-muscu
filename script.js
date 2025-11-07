@@ -218,7 +218,8 @@ const state = {
         monthlyWorkouts: new Map()
     },
     chartInstance: null,
-    progressData: []
+    progressData: [],
+    progressSort: { key: 'date', order: 'desc' }
 };
 
 // --- DOM Element References ---
@@ -531,6 +532,15 @@ const ui = {
                 <td>${d.notes}</td>
             </tr>
         `).join('');
+
+        // Update sort indicators
+        dom.progressHistoryTable.closest('table').querySelectorAll('.sort-indicator').forEach(indicator => {
+            indicator.textContent = '';
+        });
+        const activeHeader = dom.progressHistoryTable.closest('table').querySelector(`th[data-sort-key="${state.progressSort.key}"]`);
+        if (activeHeader) {
+            activeHeader.querySelector('.sort-indicator').textContent = state.progressSort.order === 'asc' ? '▲' : '▼';
+        }
     },
 
     toggleModal(modal, show) {
@@ -881,6 +891,10 @@ const logic = {
                 ui.toggleModal(dom.importModal, false);
             }
         });
+
+        dom.progressHistoryTable.closest('table').querySelector('th[data-sort-key="date"]').addEventListener('click', () => {
+            logic.sortProgressHistory('date');
+        });
     },
 
     async handleLogin() {
@@ -1095,9 +1109,8 @@ const logic = {
             }
         });
 
-        state.progressData = history.sort((a, b) => new Date(a.date) - new Date(b.date));
-
-        ui.renderProgressChartAndTable('maxWeight');
+        state.progressData = history;
+        this.sortProgressHistory(state.progressSort.key, true);
         ui.toggleModal(dom.progressModal, true);
     },
 
@@ -1129,6 +1142,30 @@ const logic = {
         if (weight <= 0 || reps <= 0) return 0;
         return weight * (1 + reps / 30);
     },
+
+    sortProgressHistory(sortKey, initialSort = false) {
+        if (!initialSort) {
+            if (state.progressSort.key === sortKey) {
+                state.progressSort.order = state.progressSort.order === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.progressSort.key = sortKey;
+                state.progressSort.order = 'asc';
+            }
+        }
+
+        state.progressData.sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            if (state.progressSort.order === 'asc') {
+                return dateA.getTime() - dateB.getTime();
+            } else {
+                return dateB.getTime() - dateA.getTime();
+            }
+        });
+
+        // Re-render the chart and table with the new sort order
+        ui.renderProgressChartAndTable('maxWeight');
+    }
 };
 
 // --- Application Entry Point ---
