@@ -10,6 +10,8 @@ const toggleActiveButton = (activeButton, inactiveButton) => {
     inactiveButton.classList.remove('active');
 };
 
+const TIME_SUFFIX = 'T12:00:00';
+
 // --- Admin User ID ---
 const ADMIN_UID = "fWPQ0nKpYGPZdMcT7mKQivq8b7j2";
 
@@ -65,7 +67,8 @@ const config = {
             progressTblHeaderDate: "Date",
             progressTblHeaderTopSet: "Meilleure Série",
             progressTblHeaderTotalVolume: "Volume Total",
-            progressTblHeaderNotes: "Notes"
+            progressTblHeaderNotes: "Notes",
+            progressCombinedView: "Vue Combinée"
         },
         en: {
             mainTitle: "Fitness Tracker 🏋️‍♂️",
@@ -115,7 +118,8 @@ const config = {
             progressTblHeaderDate: "Date",
             progressTblHeaderTopSet: "Top Set",
             progressTblHeaderTotalVolume: "Total Volume",
-            progressTblHeaderNotes: "Notes"
+            progressTblHeaderNotes: "Notes",
+            progressCombinedView: "Combined View"
         }
     },
     categoryTranslations: {
@@ -275,7 +279,8 @@ const dom = {
     progressModalClose: document.getElementById('progress-modal-close'),
     progressChartControls: document.getElementById('progress-chart-controls'),
     progressChartCanvas: document.getElementById('progress-chart-canvas'),
-    progressHistoryTable: document.getElementById('progress-history-table').querySelector('tbody'),
+    progressHistoryTable: document.getElementById('progress-history-table'),
+    progressHistoryTableBody: document.getElementById('progress-history-table').querySelector('tbody'),
 };
 
 // --- UI Functions ---
@@ -283,18 +288,20 @@ const ui = {
     updateText() {
         document.querySelectorAll('[data-translate-key]').forEach(el => {
             const key = el.getAttribute('data-translate-key');
-            if (el.id === 'submit-workout-btn') {
+            const translation = t(key);
+
+            if (el.placeholder) {
+                el.placeholder = translation;
+            } else if (el.id === 'submit-workout-btn') {
                 el.textContent = state.editingExerciseIndex !== null ? t('updateExerciseBtn') : t('saveExerciseBtn');
             } else if (el.id === 'form-title') {
                 el.textContent = state.editingExerciseIndex !== null ? t('editExerciseTitle') : t('addExerciseTitle');
-            } else if (el.placeholder) {
-                el.placeholder = t(key);
             } else {
                 const firstChild = el.childNodes[0];
                 if (firstChild && firstChild.nodeType === Node.TEXT_NODE) {
-                    firstChild.nodeValue = t(key) + ' ';
+                    firstChild.nodeValue = translation;
                 } else {
-                    el.textContent = t(key);
+                    el.textContent = translation;
                 }
             }
         });
@@ -304,7 +311,7 @@ const ui = {
 
     updateDateDisplay() {
         const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
-        dom.logDateSpan.textContent = new Date(state.currentDate + 'T12:00:00').toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        dom.logDateSpan.textContent = ' ' + new Date(state.currentDate + TIME_SUFFIX).toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
     },
 
     populateCategoryOptions() {
@@ -365,6 +372,18 @@ const ui = {
         return parseFloat(weight).toFixed(1);
     },
 
+    getLocalizedExerciseName(exercise) {
+        return state.language === 'fr' ? (config.exerciseNameMap[exercise.name] || exercise.name) : exercise.name;
+    },
+
+    getLocalizedCategoryName(category) {
+        return state.language === 'fr' ? (config.englishToFrenchCategoryKey[category] || category) : category;
+    },
+
+    getCategoryColorKey(category) {
+        return (category === 'Biceps' || category === 'Triceps') ? 'Arms' : category;
+    },
+
     renderWorkoutLog() {
         dom.workoutLog.innerHTML = "";
         const exercises = state.currentWorkoutData;
@@ -375,9 +394,8 @@ const ui = {
         exercises.forEach((ex) => {
             const card = document.createElement('div');
             card.className = "exercise-card";
-            const categoryDisplay = state.language === 'fr' ? (config.englishToFrenchCategoryKey[ex.category] || ex.category) : ex.category;
-            const exerciseInFrench = config.exerciseNameMap[ex.name];
-            const exerciseDisplay = state.language === 'fr' ? (exerciseInFrench || ex.name) : ex.name;
+            const categoryDisplay = this.getLocalizedCategoryName(ex.category);
+            const exerciseDisplay = this.getLocalizedExerciseName(ex);
             const setsList = ex.sets.map(set => {
                 const displayWeight = this.convertWeight(set.weight, set.unit, state.displayUnit);
                 const weightText = set.weight === 0 ? t('bodyweightDisplay') : `${displayWeight} ${state.displayUnit}`;
@@ -457,32 +475,48 @@ const ui = {
         // Create data points as {x, y} objects, using a timestamp for x.
         // This allows the x-axis to be a linear time scale.
         const dataPoints = state.progressData.map(d => ({
-            x: new Date(d.date + 'T12:00:00').getTime(),
+            x: new Date(d.date + TIME_SUFFIX).getTime(),
             y: d[metric]
         }));
 
-        let labelKey;
-        if (metric === 'maxWeight') {
-            labelKey = 'progressMaxWeight';
-        } else if (metric === 'totalVolume') {
-            labelKey = 'progressTotalVolume';
-        } else {
-            labelKey = 'progressEst1RM';
-        }
-        const labelText = t(labelKey);
+        let datasets = [];
         const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
+
+        const createDataset = (labelKey, metricKey, borderColor, yAxisID = 'y') => ({
+            label: t(labelKey),
+            data: state.progressData.map(d => ({
+                x: new Date(d.date + TIME_SUFFIX).getTime(),
+                y: d[metricKey]
+            })),
+            borderColor,
+            backgroundColor: borderColor.replace(', 1)', ', 0.2)'),
+            fill: false,
+            tension: 0.1,
+            yAxisID
+        });
+
+        if (metric === 'combined') {
+            datasets.push(
+                createDataset('progressMaxWeight', 'maxWeight', 'rgba(231, 76, 60, 1)'), // --color-Chest
+                createDataset('progressTotalVolume', 'totalVolume', 'rgba(46, 204, 113, 1)', 'yVolume'), // --color-Back
+                createDataset('progressEst1RM', 'est1RM', 'rgba(52, 152, 219, 1)') // --color-Legs
+            );
+        } else {
+            let labelKey;
+            if (metric === 'maxWeight') {
+                labelKey = 'progressMaxWeight';
+            } else if (metric === 'totalVolume') {
+                labelKey = 'progressTotalVolume';
+            } else {
+                labelKey = 'progressEst1RM';
+            }
+            datasets.push(createDataset(labelKey, metric, 'rgba(52, 152, 219, 1)', metric === 'totalVolume' ? 'yVolume' : 'y'));
+        }
 
         state.chartInstance = new Chart(dom.progressChartCanvas, {
             type: 'line',
             data: {
-                datasets: [{
-                    label: labelText,
-                    data: dataPoints,
-                    borderColor: 'rgba(52, 152, 219, 1)',
-                    backgroundColor: 'rgba(52, 152, 219, 0.2)',
-                    fill: true,
-                    tension: 0.1
-                }]
+                datasets: datasets
             },
             options: {
                 responsive: true,
@@ -509,7 +543,24 @@ const ui = {
                                 return value.toFixed(1) + (metric !== 'totalVolume' ? ` ${state.displayUnit}` : '');
                             }
                         }
-                     }
+                     },
+                    yVolume: {
+                        beginAtZero: true,
+                        position: 'right', // `axis` is determined by `position` in Chart.js 3+
+                        grid: {
+                            drawOnChartArea: false // Only draw grid lines for the main y-axis
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return value.toFixed(0) + ` ${state.displayUnit}`;
+                            }
+                        },
+                        title: {
+                            display: metric === 'combined',
+                            text: t('progressTotalVolume')
+                        },
+                        display: metric === 'combined'
+                    }
                 },
                 plugins: {
                     tooltip: {
@@ -524,9 +575,9 @@ const ui = {
                 }
             }
         });
-        dom.progressHistoryTable.innerHTML = state.progressData.map(d => `
+        dom.progressHistoryTableBody.innerHTML = state.progressData.map(d => `
             <tr>
-                <td>${new Date(d.date + 'T12:00:00').toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                <td>${new Date(d.date + TIME_SUFFIX).toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
                 <td>${d.topSet}</td>
                 <td>${d.totalVolume.toFixed(0)} ${state.displayUnit}</td>
                 <td>${d.notes}</td>
@@ -587,13 +638,15 @@ const handlers = {
         const card = e.target.closest('.exercise-card');
         if (!card) return;
 
-        const allCards = Array.from(dom.workoutLog.querySelectorAll('.exercise-card'));
-        const index = allCards.indexOf(card);
+        const index = Array.from(dom.workoutLog.children).indexOf(card);
 
-        if (index === -1) return;
+        if (index === -1) return; // Should not happen if card is found
 
-        if (target.classList.contains("edit-btn")) logic.startEditExercise(index);
-        else if (target.classList.contains("delete-btn")) logic.deleteExercise(index);
+        if (target.classList.contains("edit-btn")) {
+            logic.startEditExercise(index);
+        } else if (target.classList.contains("delete-btn")) {
+            logic.deleteExercise(index);
+        }
     },
 
     async handleWorkoutSubmit(e) {
@@ -727,10 +780,7 @@ const handlers = {
         if (workoutData) {
             const listItems = workoutData.map(ex => {
                 const displayName = state.language === 'fr' ? (config.exerciseNameMap[ex.name] || ex.name) : ex.name;
-                let colorCategory = ex.category;
-                if (colorCategory === 'Biceps' || colorCategory === 'Triceps') {
-                    colorCategory = 'Arms';
-                }
+                let colorCategory = ui.getCategoryColorKey(ex.category);
                 return `<li><span class="category-dot" style="background-color: var(--color-${colorCategory});"></span>${displayName}</li>`;
             }).join('');
             dom.calendarTooltip.innerHTML = `<ul>${listItems}</ul>`;
@@ -783,6 +833,11 @@ const logic = {
                 }
             }
         });
+    },
+
+    toggleButtonActiveState(activeButton, inactiveButton) {
+        activeButton.classList.add('active');
+        inactiveButton.classList.remove('active');
     },
 
     flattenExercises() {
@@ -895,6 +950,12 @@ const logic = {
         dom.progressHistoryTable.closest('table').querySelector('th[data-sort-key="date"]').addEventListener('click', () => {
             logic.sortProgressHistory('date');
         });
+        dom.progressHistoryTable.closest('table').querySelector('th[data-sort-key="topSet"]').addEventListener('click', () => {
+            logic.sortProgressHistory('topSet');
+        });
+        dom.progressHistoryTable.closest('table').querySelector('th[data-sort-key="totalVolume"]').addEventListener('click', () => {
+            logic.sortProgressHistory('totalVolume');
+        });
     },
 
     async handleLogin() {
@@ -942,7 +1003,7 @@ const logic = {
     setLanguage(lang) {
         if (state.language === lang) return;
         state.language = lang;
-        toggleActiveButton(
+        this.toggleButtonActiveState(
             lang === 'fr' ? dom.langFrButton : dom.langEnButton,
             lang === 'fr' ? dom.langEnButton : dom.langFrButton
         );
@@ -956,7 +1017,7 @@ const logic = {
     setDisplayUnit(unit) {
         if (state.displayUnit === unit) return;
         state.displayUnit = unit;
-        toggleActiveButton(
+        this.toggleButtonActiveState(
             unit === 'kg' ? dom.displayKgButton : dom.displayLbsButton,
             unit === 'kg' ? dom.displayLbsButton : dom.displayKgButton
         );
@@ -1040,54 +1101,27 @@ const logic = {
     },
 
     navigateDays(days) {
-        const date = new Date(state.currentDate + 'T12:00:00');
+        const date = new Date(state.currentDate + TIME_SUFFIX);
         date.setDate(date.getDate() + days);
         this.updateSelectedDate(date.toISOString().split('T')[0]);
     },
 
     getWorkoutColorInfo(exercises) {
         if (!exercises || exercises.length === 0) return { className: '', style: '' };
-        const orderedUniqueCategories = [];
-        const seenCategories = new Set();
-        for (const ex of exercises) {
-            let category = ex.category;
-            if (category === 'Biceps' || category === 'Triceps') {
-                category = 'Arms';
-            }
-            if (!seenCategories.has(category)) {
-                seenCategories.add(category);
-                orderedUniqueCategories.push(category);
-            }
-        }
 
+        const orderedUniqueCategories = [...new Set(exercises.map(ex => ui.getCategoryColorKey(ex.category)))];
         const uniqueCount = orderedUniqueCategories.length;
-        let className = '';
-        let style = '';
 
-        switch (uniqueCount) {
-            case 1:
-                className = 'workout-color-1';
-                style = `--c1: var(--color-${orderedUniqueCategories[0]});`;
-                break;
-            case 2:
-                className = 'workout-color-2';
-                style = `--c1: var(--color-${orderedUniqueCategories[0]}); --c2: var(--color-${orderedUniqueCategories[1]});`;
-                break;
-            case 3:
-                className = 'workout-color-3';
-                style = `--c1: var(--color-${orderedUniqueCategories[0]}); --c2: var(--color-${orderedUniqueCategories[1]}); --c3: var(--color-${orderedUniqueCategories[2]});`;
-                break;
-            default: // 4 or more categories
-                className = 'workout-color-4';
-                style = `
-                    --c1: var(--color-${orderedUniqueCategories[0]});
-                    --c2: var(--color-${orderedUniqueCategories[1]});
-                    --c3: var(--color-${orderedUniqueCategories[2]});
-                    --c4: var(--color-${orderedUniqueCategories[3]});`;
-                break;
+        const styles = orderedUniqueCategories.map((cat, i) => `--c${i + 1}: var(--color-${cat});`).join(' ');
+
+        let className = '';
+        if (uniqueCount >= 4) {
+            className = 'workout-color-4';
+        } else if (uniqueCount >= 1) {
+            className = `workout-color-${uniqueCount}`;
         }
 
-        return { className, style };
+        return { className, style: styles };
     },
 
     async openProgressModal(exerciseName) {
@@ -1154,8 +1188,8 @@ const logic = {
         }
 
         state.progressData.sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
+            const dateA = new Date(a.date + TIME_SUFFIX);
+            const dateB = new Date(b.date + TIME_SUFFIX);
             if (state.progressSort.order === 'asc') {
                 return dateA.getTime() - dateB.getTime();
             } else {
