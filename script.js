@@ -472,16 +472,15 @@ const ui = {
             btn.classList.toggle('active', btn.dataset.metric === metric);
         });
 
-        // Create data points as {x, y} objects, using a timestamp for x.
-        // This allows the x-axis to be a linear time scale.
-        const dataPoints = state.progressData.map(d => ({
-            x: new Date(d.date + TIME_SUFFIX).getTime(),
-            y: d[metric]
-        }));
+        // Check if this is a bodyweight exercise (all data points are bodyweight)
+        const isBodyweightExercise = state.progressData.length > 0 &&
+            state.progressData.every(d => d.isBodyweight);
 
         let datasets = [];
         const locale = state.language === 'fr' ? 'fr-FR' : 'en-US';
 
+        // Create data points as {x, y} objects, using a timestamp for x.
+        // This allows the x-axis to be a linear time scale.
         const createDataset = (labelKey, metricKey, borderColor, yAxisID = 'y') => ({
             label: t(labelKey),
             data: state.progressData.map(d => ({
@@ -496,21 +495,34 @@ const ui = {
         });
 
         if (metric === 'combined') {
-            datasets.push(
-                createDataset('progressMaxWeight', 'maxWeight', 'rgba(231, 76, 60, 1)'), // --color-Chest
-                createDataset('progressTotalVolume', 'totalVolume', 'rgba(46, 204, 113, 1)', 'yVolume'), // --color-Back
-                createDataset('progressEst1RM', 'est1RM', 'rgba(52, 152, 219, 1)') // --color-Legs
-            );
+            if (isBodyweightExercise) {
+                // For bodyweight exercises, all metrics use the same y-axis (reps)
+                datasets.push(
+                    createDataset('progressMaxWeight', 'maxWeight', 'rgba(231, 76, 60, 1)'),
+                    createDataset('progressTotalVolume', 'totalVolume', 'rgba(46, 204, 113, 1)'),
+                    createDataset('progressEst1RM', 'est1RM', 'rgba(52, 152, 219, 1)')
+                );
+            } else {
+                datasets.push(
+                    createDataset('progressMaxWeight', 'maxWeight', 'rgba(231, 76, 60, 1)'),
+                    createDataset('progressTotalVolume', 'totalVolume', 'rgba(46, 204, 113, 1)', 'yVolume'),
+                    createDataset('progressEst1RM', 'est1RM', 'rgba(52, 152, 219, 1)')
+                );
+            }
         } else {
             let labelKey;
+            let borderColor;
             if (metric === 'maxWeight') {
                 labelKey = 'progressMaxWeight';
+                borderColor = 'rgba(231, 76, 60, 1)';
             } else if (metric === 'totalVolume') {
                 labelKey = 'progressTotalVolume';
+                borderColor = 'rgba(46, 204, 113, 1)';
             } else {
                 labelKey = 'progressEst1RM';
+                borderColor = 'rgba(52, 152, 219, 1)';
             }
-            datasets.push(createDataset(labelKey, metric, 'rgba(52, 152, 219, 1)', metric === 'totalVolume' ? 'yVolume' : 'y'));
+            datasets.push(createDataset(labelKey, metric, borderColor, 'y'));
         }
 
         state.chartInstance = new Chart(dom.progressChartCanvas, {
@@ -540,7 +552,11 @@ const ui = {
                         beginAtZero: true,
                         ticks: {
                             callback: function(value) {
-                                return value.toFixed(1) + (metric !== 'totalVolume' ? ` ${state.displayUnit}` : '');
+                                if (isBodyweightExercise) {
+                                    return Math.round(value) + ' ' + t('repsDisplay');
+                                }
+                                const decimals = metric === 'totalVolume' ? 0 : 1;
+                                return value.toFixed(decimals) + ` ${state.displayUnit}`;
                             }
                         }
                      },
@@ -556,10 +572,10 @@ const ui = {
                             }
                         },
                         title: {
-                            display: metric === 'combined',
+                            display: metric === 'combined' && !isBodyweightExercise,
                             text: t('progressTotalVolume')
                         },
-                        display: metric === 'combined'
+                        display: metric === 'combined' && !isBodyweightExercise
                     }
                 },
                 plugins: {
@@ -575,14 +591,19 @@ const ui = {
                 }
             }
         });
-        dom.progressHistoryTableBody.innerHTML = state.progressData.map(d => `
-            <tr>
-                <td>${new Date(d.date + TIME_SUFFIX).toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
-                <td>${d.topSet}</td>
-                <td>${d.totalVolume.toFixed(0)} ${state.displayUnit}</td>
-                <td>${d.notes}</td>
-            </tr>
-        `).join('');
+        dom.progressHistoryTableBody.innerHTML = state.progressData.map(d => {
+            const totalVolumeDisplay = d.isBodyweight
+                ? `${d.totalVolume} ${t('repsDisplay')}`
+                : `${d.totalVolume.toFixed(0)} ${state.displayUnit}`;
+            return `
+                <tr>
+                    <td>${new Date(d.date + TIME_SUFFIX).toLocaleDateString(state.language === 'fr' ? 'fr-FR' : 'en-US')}</td>
+                    <td>${d.topSet}</td>
+                    <td>${totalVolumeDisplay}</td>
+                    <td>${d.notes}</td>
+                </tr>
+            `;
+        }).join('');
 
         // Update sort indicators
         dom.progressHistoryTable.closest('table').querySelectorAll('.sort-indicator').forEach(indicator => {
@@ -1154,6 +1175,28 @@ const logic = {
             weight: set.unit === 'kg' ? set.weight * config.KG_TO_LBS : set.weight
         }));
 
+        // Check if this is a bodyweight exercise (all sets have weight = 0)
+        const isBodyweight = setsInLbs.every(set => set.weight === 0);
+
+        if (isBodyweight) {
+            // Calculate reps-based metrics for bodyweight exercises
+            const maxReps = Math.max(...setsInLbs.map(set => set.reps));
+            const totalReps = setsInLbs.reduce((sum, set) => sum + set.reps, 0);
+            const bestSetRaw = setsInLbs.reduce((best, current) =>
+                current.reps > best.reps ? current : best, setsInLbs[0]);
+
+            return {
+                date,
+                notes: ex.notes || '',
+                isBodyweight: true,
+                maxWeight: maxReps, // Reuse field name for chart consistency
+                totalVolume: totalReps, // Reuse field name for chart consistency
+                est1RM: maxReps, // Reuse field name for chart consistency
+                topSet: `${bestSetRaw.reps} ${t('repsDisplay')}`
+            };
+        }
+
+        // Weight-based calculations for weighted exercises
         const est1RM = Math.max(...setsInLbs.map(set => this.calculateEst1RM(set.weight, set.reps)));
         const totalVolume = setsInLbs.reduce((sum, set) => sum + (set.weight * set.reps), 0);
         const maxWeight = Math.max(...setsInLbs.map(set => set.weight));
@@ -1163,6 +1206,7 @@ const logic = {
         return {
             date,
             notes: ex.notes || '',
+            isBodyweight: false,
             maxWeight: parseFloat(ui.convertWeight(maxWeight, 'lbs', state.displayUnit)),
             totalVolume: parseFloat(ui.convertWeight(totalVolume, 'lbs', state.displayUnit)),
             est1RM: parseFloat(ui.convertWeight(est1RM, 'lbs', state.displayUnit)),
